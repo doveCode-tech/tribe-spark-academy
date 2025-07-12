@@ -146,32 +146,32 @@ export type Database = {
       users: {
         Row: {
           approved: boolean
+          auth_user_id: string | null
           created_at: string | null
           created_by: string | null
           email: string | null
           id: string
           name: string | null
-          password: string | null
           role: string | null
         }
         Insert: {
           approved: boolean
+          auth_user_id?: string | null
           created_at?: string | null
           created_by?: string | null
           email?: string | null
           id?: string
           name?: string | null
-          password?: string | null
           role?: string | null
         }
         Update: {
           approved?: boolean
+          auth_user_id?: string | null
           created_at?: string | null
           created_by?: string | null
           email?: string | null
           id?: string
           name?: string | null
-          password?: string | null
           role?: string | null
         }
         Relationships: []
