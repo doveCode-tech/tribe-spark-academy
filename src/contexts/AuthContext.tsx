@@ -63,6 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const profile = await fetchUserProfile(session.user.id);
             setUserProfile(profile);
             setLoading(false);
+            
+            // Show welcome message only on login event
+            if (event === 'SIGNED_IN' && profile?.name) {
+              toast({
+                title: `Welcome back, ${profile.name}!`,
+                description: "Successfully logged in.",
+              });
+            }
           }, 0);
         } else {
           setUserProfile(null);
@@ -103,10 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           variant: "destructive",
         });
       } else {
-        toast({
-          title: "Welcome back!",
-          description: "Successfully logged in.",
-        });
+        // We'll show the welcome message after the profile is loaded
+        // This is handled in the auth state change listener
       }
 
       return { error };

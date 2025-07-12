@@ -39,13 +39,18 @@ export function LMSLayout({ children }: LMSLayoutProps) {
                 </div>
                 
                 {/* User Actions */}
-                <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="icon" className="relative">
-                    <Bell className="w-4 h-4" />
-                    <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      3
-                    </span>
-                  </Button>
+                 <div className="flex items-center space-x-2">
+                   <Button 
+                     variant="outline" 
+                     size="icon" 
+                     className="relative"
+                     onClick={() => {
+                       // TODO: Implement notifications panel
+                       console.log('Notifications clicked');
+                     }}
+                   >
+                     <Bell className="w-4 h-4" />
+                   </Button>
                   
                   <Button 
                     variant="outline" 
