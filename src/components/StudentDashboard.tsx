@@ -76,11 +76,19 @@ export function StudentDashboard() {
           <MessageCircle className="w-5 h-5 mr-2" />
           Ask AI Assistant
         </Button>
-        <Button variant="outline" className="h-16">
+        <Button 
+          variant="outline" 
+          className="h-16"
+          onClick={() => window.location.href = '/portfolio'}
+        >
           <BookOpen className="w-5 h-5 mr-2" />
           View Portfolio
         </Button>
-        <Button variant="outline" className="h-16">
+        <Button 
+          variant="outline" 
+          className="h-16"
+          onClick={() => window.location.href = '/achievements'}
+        >
           <Trophy className="w-5 h-5 mr-2" />
           Achievements
         </Button>

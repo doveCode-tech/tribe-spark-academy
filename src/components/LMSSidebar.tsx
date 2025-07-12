@@ -25,12 +25,10 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Define user role type
 type UserRole = 'student' | 'tutor' | 'admin';
-
-// Mock user role for now - in real app this would come from auth context
-const userRole = 'student' as UserRole;
 
 const studentItems = [
   { title: "Dashboard", url: "/", icon: Home },
@@ -58,8 +56,8 @@ const adminItems = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
-const getMenuItems = () => {
-  switch (userRole) {
+const getMenuItems = (role: UserRole | undefined) => {
+  switch (role) {
     case 'student': return studentItems;
     case 'tutor': return tutorItems;
     case 'admin': return adminItems;
@@ -67,8 +65,8 @@ const getMenuItems = () => {
   }
 };
 
-const getRoleDisplayName = () => {
-  switch (userRole) {
+const getRoleDisplayName = (role: UserRole | undefined) => {
+  switch (role) {
     case 'student': return 'Student Portal';
     case 'tutor': return 'Tutor Dashboard';
     case 'admin': return 'Admin Panel';
@@ -78,9 +76,11 @@ const getRoleDisplayName = () => {
 
 export function LMSSidebar() {
   const { state } = useSidebar();
+  const { userProfile } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
-  const menuItems = getMenuItems();
+  const userRole = userProfile?.role as UserRole;
+  const menuItems = getMenuItems(userRole);
   const collapsed = state === "collapsed";
   
   const isActive = (path: string) => currentPath === path;
@@ -104,7 +104,7 @@ export function LMSSidebar() {
               </div>
               <div>
                 <h2 className="text-sidebar-foreground font-bold text-lg">STEMTribe</h2>
-                <p className="text-sidebar-foreground/70 text-xs">{getRoleDisplayName()}</p>
+                <p className="text-sidebar-foreground/70 text-xs">{getRoleDisplayName(userRole)}</p>
               </div>
             </div>
           )}
@@ -148,10 +148,10 @@ export function LMSSidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sidebar-foreground font-medium text-sm truncate">
-                  Alex Johnson
+                  {userProfile?.name || 'User'}
                 </p>
                 <p className="text-sidebar-foreground/70 text-xs capitalize">
-                  {userRole}
+                  {userRole || 'student'}
                 </p>
               </div>
             </div>

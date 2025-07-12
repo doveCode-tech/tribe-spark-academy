@@ -1,205 +1,181 @@
-import { LMSLayout } from "@/components/LMSLayout";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { BookOpen, Clock, Users, Star, ChevronRight, Filter, Search } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Clock, Users, Star, Play, BookOpen, Code, Cpu, Palette } from "lucide-react";
-
-const mockCourses = [
-  {
-    id: 1,
-    title: "Python Programming Fundamentals",
-    description: "Learn the basics of Python programming with hands-on projects and real-world examples.",
-    instructor: "Ms. Sarah Chen",
-    level: "Beginner",
-    duration: "6 weeks",
-    students: 234,
-    rating: 4.8,
-    progress: 75,
-    enrolled: true,
-    category: "Programming",
-    icon: Code,
-    thumbnail: "gradient-primary"
-  },
-  {
-    id: 2,
-    title: "Robotics Engineering Basics",
-    description: "Build and program robots using Arduino and sensors. Perfect introduction to robotics.",
-    instructor: "Mr. David Tech",
-    level: "Beginner",
-    duration: "8 weeks",
-    students: 189,
-    rating: 4.9,
-    progress: 40,
-    enrolled: true,
-    category: "Robotics",
-    icon: Cpu,
-    thumbnail: "gradient-secondary"
-  },
-  {
-    id: 3,
-    title: "Web Development with HTML & CSS",
-    description: "Create beautiful, responsive websites from scratch using modern web technologies.",
-    instructor: "Ms. Lisa Code",
-    level: "Beginner",
-    duration: "4 weeks",
-    students: 156,
-    rating: 4.7,
-    progress: 90,
-    enrolled: true,
-    category: "Web Development",
-    icon: BookOpen,
-    thumbnail: "gradient-success"
-  },
-  {
-    id: 4,
-    title: "Creative Coding with p5.js",
-    description: "Combine art and programming to create interactive digital art and animations.",
-    instructor: "Mr. Alex Creative",
-    level: "Intermediate",
-    duration: "5 weeks",
-    students: 98,
-    rating: 4.6,
-    progress: 0,
-    enrolled: false,
-    category: "Creative Tech",
-    icon: Palette,
-    thumbnail: "gradient-primary"
-  },
-  {
-    id: 5,
-    title: "JavaScript Game Development",
-    description: "Build your own browser games using JavaScript and modern game development techniques.",
-    instructor: "Ms. Game Dev",
-    level: "Intermediate",
-    duration: "7 weeks",
-    students: 145,
-    rating: 4.8,
-    progress: 0,
-    enrolled: false,
-    category: "Programming",
-    icon: Code,
-    thumbnail: "gradient-secondary"
-  }
-];
-
-const CourseCard = ({ course }: { course: typeof mockCourses[0] }) => {
-  const IconComponent = course.icon;
-  
-  return (
-    <Card className="shadow-card hover:shadow-elevated transition-all duration-300 hover:-translate-y-1">
-      <CardHeader className="p-0">
-        <div className={`h-40 bg-${course.thumbnail} rounded-t-lg flex items-center justify-center relative overflow-hidden`}>
-          <IconComponent className="w-16 h-16 text-white opacity-90" />
-          <div className="absolute inset-0 bg-gradient-to-br from-black/20 to-transparent" />
-          {course.enrolled && (
-            <Badge className="absolute top-3 right-3 bg-success text-success-foreground">
-              Enrolled
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      
-      <CardContent className="p-6">
-        <div className="flex justify-between items-start mb-2">
-          <Badge variant="outline" className="text-xs">
-            {course.category}
-          </Badge>
-          <div className="flex items-center space-x-1">
-            <Star className="w-4 h-4 fill-warning text-warning" />
-            <span className="text-sm font-medium">{course.rating}</span>
-          </div>
-        </div>
-        
-        <CardTitle className="mb-2 line-clamp-2">{course.title}</CardTitle>
-        <CardDescription className="mb-4 line-clamp-3">{course.description}</CardDescription>
-        
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>by {course.instructor}</span>
-            <Badge variant="secondary" className="text-xs">
-              {course.level}
-            </Badge>
-          </div>
-          
-          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-            <div className="flex items-center space-x-1">
-              <Clock className="w-4 h-4" />
-              <span>{course.duration}</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <Users className="w-4 h-4" />
-              <span>{course.students} students</span>
-            </div>
-          </div>
-          
-          {course.enrolled && course.progress > 0 && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Progress</span>
-                <span>{course.progress}%</span>
-              </div>
-              <Progress value={course.progress} />
-            </div>
-          )}
-          
-          <div className="pt-2">
-            {course.enrolled ? (
-              <Button className="w-full" size="sm">
-                <Play className="w-4 h-4 mr-2" />
-                {course.progress > 0 ? 'Continue Learning' : 'Start Course'}
-              </Button>
-            ) : (
-              <Button variant="outline" className="w-full" size="sm">
-                View Details
-              </Button>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+import { Input } from "@/components/ui/input";
+import { LMSLayout } from "@/components/LMSLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Courses() {
-  const enrolledCourses = mockCourses.filter(course => course.enrolled);
-  const availableCourses = mockCourses.filter(course => !course.enrolled);
+  const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      fetchEnrolledCourses();
+    }
+  }, [user]);
+
+  const fetchEnrolledCourses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          id,
+          status,
+          progress_percentage,
+          enrolled_at,
+          courses (
+            id,
+            title,
+            description,
+            category
+          )
+        `)
+        .eq('student_id', user?.id)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      setEnrolledCourses(data || []);
+    } catch (error: any) {
+      console.error('Error fetching enrolled courses:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load your courses.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredCourses = enrolledCourses.filter(enrollment =>
+    enrollment.courses?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    enrollment.courses?.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    enrollment.courses?.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleCourseClick = (courseId: string) => {
+    navigate(`/courses/${courseId}`);
+  };
+
+  if (loading) {
+    return (
+      <LMSLayout>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading your courses...</p>
+          </div>
+        </div>
+      </LMSLayout>
+    );
+  }
 
   return (
     <LMSLayout>
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">My Courses</h1>
-          <p className="text-muted-foreground">Continue your learning journey</p>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">My Courses</h1>
+            <p className="text-muted-foreground">Continue your learning journey</p>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input 
+                placeholder="Search courses..." 
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" size="icon">
+              <Filter className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
-        {/* Enrolled Courses */}
-        {enrolledCourses.length > 0 && (
-          <section>
-            <h2 className="text-2xl font-semibold mb-4 flex items-center">
-              <BookOpen className="w-6 h-6 mr-2 text-primary" />
-              Currently Enrolled
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {enrolledCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* My Courses */}
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <BookOpen className="w-5 h-5 mr-2 text-primary" />
+              My Courses
+            </CardTitle>
+            <CardDescription>
+              {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} {searchTerm ? 'found' : 'enrolled'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredCourses.length > 0 ? (
+              filteredCourses.map((enrollment) => (
+                <div
+                  key={enrollment.id}
+                  className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => handleCourseClick(enrollment.courses.id)}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-semibold text-lg">{enrollment.courses.title}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {enrollment.courses.description}
+                      </p>
+                    </div>
+                    <Badge variant="secondary">
+                      {enrollment.courses.category}
+                    </Badge>
+                  </div>
 
-        {/* Available Courses */}
-        <section>
-          <h2 className="text-2xl font-semibold mb-4 flex items-center">
-            <Star className="w-6 h-6 mr-2 text-warning" />
-            Recommended Courses
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {availableCourses.map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
-        </section>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>Progress</span>
+                        <span>{enrollment.progress_percentage || 0}%</span>
+                      </div>
+                      <Progress value={enrollment.progress_percentage || 0} className="h-2" />
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        Status: {enrollment.status}
+                      </span>
+                      <Button size="sm">
+                        Continue Learning
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-12">
+                <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
+                <h3 className="text-lg font-semibold mb-2">
+                  {searchTerm ? 'No courses found' : 'No courses enrolled'}
+                </h3>
+                <p className="text-muted-foreground">
+                  {searchTerm 
+                    ? 'Try adjusting your search terms' 
+                    : 'Contact your tutor or admin to get enrolled in courses'
+                  }
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </LMSLayout>
   );

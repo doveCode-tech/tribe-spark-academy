@@ -55,6 +55,8 @@ export type Database = {
           enrolled_at: string | null
           enrolled_by: string | null
           id: string
+          progress_percentage: number | null
+          status: string | null
           student_id: string | null
         }
         Insert: {
@@ -62,6 +64,8 @@ export type Database = {
           enrolled_at?: string | null
           enrolled_by?: string | null
           id?: string
+          progress_percentage?: number | null
+          status?: string | null
           student_id?: string | null
         }
         Update: {
@@ -69,6 +73,8 @@ export type Database = {
           enrolled_at?: string | null
           enrolled_by?: string | null
           id?: string
+          progress_percentage?: number | null
+          status?: string | null
           student_id?: string | null
         }
         Relationships: [
@@ -91,6 +97,94 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_progress: {
+        Row: {
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          lesson_id: string | null
+          score: number | null
+          student_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lesson_id?: string | null
+          score?: number | null
+          student_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lesson_id?: string | null
+          score?: number | null
+          student_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lessons: {
+        Row: {
+          content: string | null
+          course_id: string | null
+          created_at: string
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          order_index: number
+          title: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          content?: string | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          order_index?: number
+          title: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          content?: string | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          order_index?: number
+          title?: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
             referencedColumns: ["id"]
           },
         ]
@@ -147,31 +241,43 @@ export type Database = {
         Row: {
           approved: boolean
           auth_user_id: string | null
+          avatar_url: string | null
+          bio: string | null
           created_at: string | null
           created_by: string | null
           email: string | null
           id: string
+          last_login: string | null
           name: string | null
+          phone: string | null
           role: string | null
         }
         Insert: {
           approved: boolean
           auth_user_id?: string | null
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           created_by?: string | null
           email?: string | null
           id?: string
+          last_login?: string | null
           name?: string | null
+          phone?: string | null
           role?: string | null
         }
         Update: {
           approved?: boolean
           auth_user_id?: string | null
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           created_by?: string | null
           email?: string | null
           id?: string
+          last_login?: string | null
           name?: string | null
+          phone?: string | null
           role?: string | null
         }
         Relationships: []
