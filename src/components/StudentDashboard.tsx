@@ -73,7 +73,7 @@ export function StudentDashboard() {
       {/* Welcome Section */}
       <div className="bg-gradient-hero rounded-xl p-6 text-white shadow-elevated">
         <h1 className="text-3xl font-bold mb-2">
-          Welcome back, {userProfile?.name || 'Student'}! 🚀
+          Welcome back, {userProfile?.name?.split(' ')[0] || 'Student'}! 🚀
         </h1>
         <p className="text-white/90 mb-4">Ready to continue your learning journey?</p>
         <div className="flex items-center space-x-4">

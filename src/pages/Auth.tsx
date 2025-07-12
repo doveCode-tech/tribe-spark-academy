@@ -11,7 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, user } = useAuth();
@@ -39,7 +40,8 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
     
-    const { error } = await signUp(email, password, name);
+    const fullName = `${firstName} ${lastName}`.trim();
+    const { error } = await signUp(email, password, fullName);
     
     setLoading(false);
   };
@@ -112,17 +114,31 @@ export default function Auth() {
             
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="John Doe"
-                    required
-                    disabled={loading}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-firstname">First Name</Label>
+                    <Input
+                      id="signup-firstname"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="John"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-lastname">Last Name</Label>
+                    <Input
+                      id="signup-lastname"
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Doe"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-2">

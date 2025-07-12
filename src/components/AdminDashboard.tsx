@@ -1,0 +1,288 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Plus, BookOpen, Users, GraduationCap, Settings, Trash2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface Course {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  created_at: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  approved: boolean;
+  created_at: string;
+}
+
+export function AdminDashboard() {
+  const { userProfile } = useAuth();
+  const { toast } = useToast();
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      // Fetch courses
+      const { data: coursesData, error: coursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (coursesError) throw coursesError;
+
+      // Fetch users
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+
+      setCourses(coursesData || []);
+      setUsers(usersData || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setUsers(users.filter(user => user.id !== userId));
+      toast({
+        title: "Success",
+        description: "User deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleUserRole = async (userId: string, currentRole: string) => {
+    const newRole = currentRole === 'student' ? 'tutor' : 'student';
+    
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      setUsers(users.map(user => 
+        user.id === userId ? { ...user, role: newRole } : user
+      ));
+      
+      toast({
+        title: "Success",
+        description: `User role updated to ${newRole}`,
+      });
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update user role",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Welcome Admin</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage courses, users, and oversee the learning platform
+          </p>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{courses.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{users.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Students</CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {users.filter(user => user.role === 'student').length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tutors</CardTitle>
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {users.filter(user => user.role === 'tutor').length}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Courses Management */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Course Management</CardTitle>
+              <CardDescription>Create and manage courses</CardDescription>
+            </div>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Course
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {courses.length === 0 ? (
+            <div className="text-center py-8">
+              <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">No courses yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Create your first course to get started
+              </p>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Course
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {courses.map((course) => (
+                <div key={course.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">{course.title}</h4>
+                    <p className="text-sm text-muted-foreground">{course.description}</p>
+                    <Badge variant="secondary" className="mt-1">
+                      {course.category}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm">Edit</Button>
+                    <Button variant="outline" size="sm">Lessons</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* User Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle>User Management</CardTitle>
+          <CardDescription>Manage students and tutors</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {users.map((user) => (
+              <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">{user.name}</h4>
+                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                  <div className="flex gap-2 mt-1">
+                    <Badge variant={user.role === 'admin' ? 'default' : user.role === 'tutor' ? 'secondary' : 'outline'}>
+                      {user.role}
+                    </Badge>
+                    <Badge variant={user.approved ? 'default' : 'destructive'}>
+                      {user.approved ? 'Approved' : 'Pending'}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {user.role !== 'admin' && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => toggleUserRole(user.id, user.role)}
+                      >
+                        Make {user.role === 'student' ? 'Tutor' : 'Student'}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => deleteUser(user.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
