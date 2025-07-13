@@ -12,13 +12,19 @@ const Index = () => {
       return <div>Loading...</div>;
     }
 
+    console.log('User profile in Index:', userProfile);
+    console.log('User role:', userProfile.role);
+
     switch (userProfile.role) {
       case 'admin':
+        console.log('Rendering AdminDashboard');
         return <AdminDashboard />;
       case 'tutor':
+        console.log('Rendering TutorDashboard');
         return <TutorDashboard />;
       case 'student':
       default:
+        console.log('Rendering StudentDashboard');
         return <StudentDashboard />;
     }
   };
