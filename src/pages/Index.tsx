@@ -9,13 +9,21 @@ const Index = () => {
 
   const renderDashboard = () => {
     if (!userProfile) {
-      return <div>Loading...</div>;
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading user profile...</div>
+        </div>
+      );
     }
 
     console.log('User profile in Index:', userProfile);
     console.log('User role:', userProfile.role);
+    console.log('User role type:', typeof userProfile.role);
 
-    switch (userProfile.role) {
+    // Ensure we're comparing the role correctly
+    const userRole = userProfile.role?.toLowerCase()?.trim();
+    
+    switch (userRole) {
       case 'admin':
         console.log('Rendering AdminDashboard');
         return <AdminDashboard />;
@@ -24,7 +32,7 @@ const Index = () => {
         return <TutorDashboard />;
       case 'student':
       default:
-        console.log('Rendering StudentDashboard');
+        console.log('Rendering StudentDashboard, role was:', userRole);
         return <StudentDashboard />;
     }
   };

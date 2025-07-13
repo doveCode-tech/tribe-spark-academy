@@ -136,7 +136,9 @@ export function AdminDashboard() {
       {/* Welcome Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Welcome Admin</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            Welcome Admin{userProfile?.first_name ? `, ${userProfile.first_name}` : ''}
+          </h1>
           <p className="text-muted-foreground mt-1">
             Manage courses, users, and oversee the learning platform
           </p>
