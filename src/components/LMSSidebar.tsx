@@ -33,8 +33,9 @@ type UserRole = 'student' | 'tutor' | 'admin';
 const studentItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "My Courses", url: "/courses", icon: BookOpen },
-  { title: "Achievements", url: "/achievements", icon: Trophy },
   { title: "Portfolio", url: "/portfolio", icon: User },
+  { title: "Achievements", url: "/achievements", icon: Trophy },
+  { title: "Profile", url: "/profile", icon: Settings },
   { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
 
@@ -43,6 +44,7 @@ const tutorItems = [
   { title: "My Students", url: "/students", icon: Users },
   { title: "Courses", url: "/courses", icon: BookOpen },
   { title: "Grading", url: "/grading", icon: BookOpenCheck },
+  { title: "Profile", url: "/profile", icon: Settings },
   { title: "Create Student", url: "/create-student", icon: UserPlus },
   { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
@@ -53,6 +55,7 @@ const adminItems = [
   { title: "Manage Users", url: "/users", icon: Users },
   { title: "Course Management", url: "/courses", icon: BookOpen },
   { title: "Create Tutor", url: "/create-tutor", icon: PlusCircle },
+  { title: "Profile", url: "/profile", icon: User },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

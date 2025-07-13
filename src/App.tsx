@@ -12,6 +12,7 @@ import Achievements from "./pages/Achievements";
 import Portfolio from "./pages/Portfolio";
 import Chat from "./pages/Chat";
 import Auth from "./pages/Auth";
+import Profile from "./pages/Profile";
 import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
 
@@ -55,6 +56,11 @@ const App = () => (
             <Route path="/chat" element={
               <ProtectedRoute>
                 <Chat />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

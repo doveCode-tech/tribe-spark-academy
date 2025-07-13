@@ -6,6 +6,7 @@ import { Plus, BookOpen, Users, GraduationCap, Settings, Trash2 } from "lucide-r
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { CourseCreator } from "./CourseCreator";
 
 interface Course {
   id: string;
@@ -195,10 +196,7 @@ export function AdminDashboard() {
               <CardTitle>Course Management</CardTitle>
               <CardDescription>Create and manage courses</CardDescription>
             </div>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Course
-            </Button>
+            <CourseCreator onCourseCreated={fetchData} />
           </div>
         </CardHeader>
         <CardContent>
@@ -209,10 +207,7 @@ export function AdminDashboard() {
               <p className="text-muted-foreground mb-4">
                 Create your first course to get started
               </p>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Course
-              </Button>
+              <CourseCreator onCourseCreated={fetchData} />
             </div>
           ) : (
             <div className="grid gap-4">
