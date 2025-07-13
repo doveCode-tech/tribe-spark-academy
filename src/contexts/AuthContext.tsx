@@ -25,17 +25,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user ID:', userId);
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching user profile:', error);
         return null;
       }
 
+      console.log('Fetched user profile:', data);
       return data;
     } catch (error) {
       console.error('Error fetching user profile:', error);
