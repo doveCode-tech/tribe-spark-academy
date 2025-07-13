@@ -96,7 +96,7 @@ export function TutorDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
-            Welcome Tutor {userProfile?.name || 'User'}
+            Welcome Tutor, {userProfile?.name || 'User'}
           </h1>
           <p className="text-muted-foreground mt-1">
             Review student submissions and provide guidance

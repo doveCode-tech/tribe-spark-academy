@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CourseCreator } from "./CourseCreator";
 import { PasswordReset } from "./PasswordReset";
+import { EnrollmentDialog } from "./EnrollmentDialog";
 
 interface Course {
   id: string;
@@ -197,7 +198,14 @@ export function AdminDashboard() {
               <CardTitle>Course Management</CardTitle>
               <CardDescription>Create and manage courses</CardDescription>
             </div>
-            <CourseCreator onCourseCreated={fetchData} />
+            <div className="flex gap-2">
+              <EnrollmentDialog 
+                courses={courses} 
+                users={users} 
+                onEnrollmentComplete={fetchData} 
+              />
+              <CourseCreator onCourseCreated={fetchData} />
+            </div>
           </div>
         </CardHeader>
         <CardContent>

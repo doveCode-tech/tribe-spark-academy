@@ -24,23 +24,14 @@ export function AvatarUpload() {
 
       const file = event.target.files[0];
       const fileExt = file.name.split('.').pop();
-      const filePath = `${userProfile?.id}-${Math.random()}.${fileExt}`;
-
-      // Create avatar bucket if it doesn't exist
-      const { error: bucketError } = await supabase.storage.createBucket('avatars', {
-        public: true,
-        allowedMimeTypes: ['image/*'],
-        fileSizeLimit: 1024 * 1024 * 2, // 2MB
-      });
-
-      if (bucketError && !bucketError.message.includes('already exists')) {
-        throw bucketError;
-      }
+      const filePath = `${userProfile?.auth_user_id}/${Math.random()}.${fileExt}`;
 
       // Upload the file
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          upsert: true
+        });
 
       if (uploadError) {
         throw uploadError;

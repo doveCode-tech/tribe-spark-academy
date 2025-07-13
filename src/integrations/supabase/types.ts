@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       courses: {
         Row: {
+          capstone_project_description: string | null
+          capstone_project_title: string | null
           category: string | null
           created_at: string | null
           created_by: string | null
@@ -24,6 +26,8 @@ export type Database = {
           title: string | null
         }
         Insert: {
+          capstone_project_description?: string | null
+          capstone_project_title?: string | null
           category?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -32,6 +36,8 @@ export type Database = {
           title?: string | null
         }
         Update: {
+          capstone_project_description?: string | null
+          capstone_project_title?: string | null
           category?: string | null
           created_at?: string | null
           created_by?: string | null
