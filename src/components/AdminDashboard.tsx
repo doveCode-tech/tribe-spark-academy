@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CourseCreator } from "./CourseCreator";
+import { PasswordReset } from "./PasswordReset";
 
 interface Course {
   id: string;
@@ -278,6 +279,9 @@ export function AdminDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Password Reset Management */}
+      <PasswordReset users={users} onPasswordReset={fetchData} />
     </div>
   );
 }
