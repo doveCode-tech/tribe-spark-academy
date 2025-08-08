@@ -1,4 +1,4 @@
-import { BookOpen, Trophy, Clock, MessageCircle, BarChart3, Star, GraduationCap } from "lucide-react";
+import { BookOpen, Trophy, Clock, MessageCircle, BarChart3, Star, GraduationCap, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { HeroSection } from "./HeroSection";
+import { CourseCard } from "./CourseCard";
 
 
 export function StudentDashboard() {
   const { userProfile } = useAuth();
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [portfolioProjects, setPortfolioProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +21,7 @@ export function StudentDashboard() {
   useEffect(() => {
     if (userProfile) {
       fetchEnrolledCourses();
+      fetchAvailableCourses();
       fetchAchievements();
       fetchPortfolioProjects();
     }
@@ -45,6 +49,23 @@ export function StudentDashboard() {
     }
   };
 
+  const fetchAvailableCourses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching available courses:', error);
+      } else {
+        setAvailableCourses(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching available courses:', error);
+    }
+  };
+
   const fetchAchievements = async () => {
     // For now, achievements will be empty by default
     // This can be implemented when the achievements system is built
@@ -69,111 +90,116 @@ export function StudentDashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-hero rounded-xl p-6 text-white shadow-elevated">
-        <h1 className="text-3xl font-bold mb-2">
-          Welcome back, {userProfile?.name?.split(' ')[0] || 'Student'}! 🚀
-        </h1>
-        <p className="text-white/90 mb-4">Ready to continue your learning journey?</p>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <BookOpen className="w-5 h-5" />
-            <span className="font-semibold">{enrolledCourses.length} Courses</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Trophy className="w-5 h-5" />
-            <span className="font-semibold">{achievements.length} Achievements</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <GraduationCap className="w-5 h-5" />
-            <span className="font-semibold">{portfolioProjects.length} Projects</span>
-          </div>
-        </div>
+    <div className="space-y-8">
+      {/* Hero Section */}
+      <HeroSection onStartLearning={() => window.location.href = '/courses'} />
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+          <CardContent className="p-4 text-center">
+            <BookOpen className="w-8 h-8 mx-auto text-primary mb-2" />
+            <div className="text-2xl font-bold text-primary">{enrolledCourses.length}</div>
+            <div className="text-sm text-muted-foreground">Active Courses</div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
+          <CardContent className="p-4 text-center">
+            <Trophy className="w-8 h-8 mx-auto text-success mb-2" />
+            <div className="text-2xl font-bold text-success">{achievements.length}</div>
+            <div className="text-sm text-muted-foreground">Achievements</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-secondary/10 to-secondary/5 border-secondary/20">
+          <CardContent className="p-4 text-center">
+            <GraduationCap className="w-8 h-8 mx-auto text-secondary mb-2" />
+            <div className="text-2xl font-bold text-secondary">{portfolioProjects.length}</div>
+            <div className="text-sm text-muted-foreground">Projects</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20">
+          <CardContent className="p-4 text-center">
+            <Sparkles className="w-8 h-8 mx-auto text-warning mb-2" />
+            <div className="text-2xl font-bold text-warning">0</div>
+            <div className="text-sm text-muted-foreground">Streak Days</div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Button className="h-16 bg-gradient-primary hover:opacity-90 transition-opacity">
-          <MessageCircle className="w-5 h-5 mr-2" />
-          Ask AI Assistant
-        </Button>
-        <Button 
-          variant="outline" 
-          className="h-16"
-          onClick={() => window.location.href = '/portfolio'}
-        >
-          <BookOpen className="w-5 h-5 mr-2" />
-          View Portfolio
-        </Button>
-        <Button 
-          variant="outline" 
-          className="h-16"
-          onClick={() => window.location.href = '/achievements'}
-        >
-          <Trophy className="w-5 h-5 mr-2" />
-          Achievements
-        </Button>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* My Active Courses */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold flex items-center">
+              <BookOpen className="w-6 h-6 mr-2 text-primary" />
+              My Courses
+            </h2>
+            <Button variant="outline" onClick={() => window.location.href = '/courses'}>
+              View All
+            </Button>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* My Courses */}
-        <div className="lg:col-span-2">
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <BookOpen className="w-5 h-5 mr-2 text-primary" />
-                My Courses
-              </CardTitle>
-              <CardDescription>Continue where you left off</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                  <p className="text-muted-foreground mt-2">Loading courses...</p>
-                </div>
-              ) : enrolledCourses.length === 0 ? (
-                <div className="text-center py-8">
-                  <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Courses Yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    You haven't been enrolled in any courses yet. Contact your instructor or admin to get started.
-                  </p>
-                  <Button variant="outline" onClick={() => window.location.href = '/courses'}>
-                    Browse Available Courses
-                  </Button>
-                </div>
-              ) : (
-                enrolledCourses.map((enrollment) => (
-                  <div key={enrollment.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-lg">{enrollment.courses.title}</h3>
-                        <p className="text-muted-foreground text-sm">{enrollment.courses.category}</p>
-                      </div>
-                      <Badge variant="secondary">{enrollment.progress_percentage || 0}%</Badge>
-                    </div>
-                    
-                    <Progress value={enrollment.progress_percentage || 0} className="mb-3" />
-                    
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-muted-foreground">
-                        Status: {enrollment.status}
-                      </div>
-                      <Button 
-                        size="sm" 
-                        className="ml-auto"
-                        onClick={() => window.location.href = `/courses/${enrollment.course_id}`}
-                      >
-                        Continue
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading courses...</p>
+            </div>
+          ) : enrolledCourses.length === 0 ? (
+            <Card className="p-8 text-center bg-gradient-to-br from-primary/5 to-secondary/5">
+              <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Ready to Start Learning?</h3>
+              <p className="text-muted-foreground mb-6">
+                Choose from our amazing collection of kid-friendly courses!
+              </p>
+              <Button className="bg-gradient-primary" onClick={() => window.location.href = '/courses'}>
+                <BookOpen className="w-4 h-4 mr-2" />
+                Browse Courses
+              </Button>
+            </Card>
+          ) : (
+            <div className="grid gap-6">
+              {enrolledCourses.slice(0, 3).map((enrollment) => (
+                <CourseCard
+                  key={enrollment.id}
+                  course={enrollment.courses}
+                  enrollment={enrollment}
+                  isEnrolled={true}
+                  onContinue={() => window.location.href = `/courses/${enrollment.course_id}`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Available Courses Preview */}
+          {!loading && availableCourses.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold flex items-center">
+                <Sparkles className="w-5 h-5 mr-2 text-secondary" />
+                Explore New Courses
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                {availableCourses.slice(0, 4).map((course) => {
+                  const isEnrolled = enrolledCourses.some(e => e.course_id === course.id);
+                  if (isEnrolled) return null;
+                  
+                  return (
+                    <CourseCard
+                      key={course.id}
+                      course={course}
+                      isEnrolled={false}
+                      onEnroll={() => {
+                        // This would trigger enrollment flow
+                        console.log('Enroll in course:', course.id);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sidebar - Achievements and AI Recommendations */}

@@ -1,19 +1,22 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Clock, Users, Star, ChevronRight, Filter, Search } from "lucide-react";
+import { BookOpen, Clock, Users, Star, ChevronRight, Filter, Search, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { LMSLayout } from "@/components/LMSLayout";
+import { CourseCard } from "@/components/CourseCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Courses() {
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
+  const [allCourses, setAllCourses] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -22,6 +25,7 @@ export default function Courses() {
   useEffect(() => {
     if (user) {
       fetchEnrolledCourses();
+      fetchAllCourses();
     }
   }, [user]);
 
@@ -59,11 +63,36 @@ export default function Courses() {
     }
   };
 
-  const filteredCourses = enrolledCourses.filter(enrollment =>
-    enrollment.courses?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    enrollment.courses?.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    enrollment.courses?.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const fetchAllCourses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setAllCourses(data || []);
+    } catch (error: any) {
+      console.error('Error fetching all courses:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load courses.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const categories = ["All", ...new Set(allCourses.map(course => course.category))];
+  
+  const filteredCourses = allCourses.filter(course => {
+    const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         course.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         course.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || course.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   const handleCourseClick = (courseId: string) => {
     navigate(`/courses/${courseId}`);
@@ -84,98 +113,119 @@ export default function Courses() {
 
   return (
     <LMSLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">My Courses</h1>
-            <p className="text-muted-foreground">Continue your learning journey</p>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input 
-                placeholder="Search courses..." 
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+        <div className="bg-gradient-hero rounded-3xl p-8 text-white">
+          <div className="max-w-4xl">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              Course Catalog 📚
+            </h1>
+            <p className="text-xl text-white/90 mb-6">
+              Explore amazing courses designed just for young learners! From coding to robotics, 
+              we have everything you need to become a tech superstar.
+            </p>
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5" />
+                <span className="font-semibold">{allCourses.length} Fun Courses</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <BookOpen className="w-5 h-5" />
+                <span className="font-semibold">Beginner Friendly</span>
+              </div>
             </div>
-            <Button variant="outline" size="icon">
-              <Filter className="w-4 h-4" />
-            </Button>
           </div>
         </div>
 
-        {/* My Courses */}
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <BookOpen className="w-5 h-5 mr-2 text-primary" />
-              My Courses
-            </CardTitle>
-            <CardDescription>
-              {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} {searchTerm ? 'found' : 'enrolled'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredCourses.length > 0 ? (
-              filteredCourses.map((enrollment) => (
-                <div
-                  key={enrollment.id}
-                  className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => handleCourseClick(enrollment.courses.id)}
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-semibold text-lg">{enrollment.courses.title}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {enrollment.courses.description}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">
-                      {enrollment.courses.category}
-                    </Badge>
-                  </div>
+        {/* Search and Filters */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input 
+              placeholder="Search for courses..." 
+              className="pl-10 h-12 text-base"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {categories.map((category) => (
+              <Button
+                key={category}
+                variant={selectedCategory === category ? "default" : "outline"}
+                className={`whitespace-nowrap ${
+                  selectedCategory === category 
+                    ? "bg-gradient-primary text-white" 
+                    : "hover:bg-primary/10"
+                }`}
+                onClick={() => setSelectedCategory(category)}
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
+        </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Progress</span>
-                        <span>{enrollment.progress_percentage || 0}%</span>
-                      </div>
-                      <Progress value={enrollment.progress_percentage || 0} className="h-2" />
-                    </div>
+        {/* Course Grid */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">
+              {selectedCategory === "All" ? "All Courses" : selectedCategory}
+              <span className="text-muted-foreground text-lg ml-2">
+                ({filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''})
+              </span>
+            </h2>
+          </div>
 
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        Status: {enrollment.status}
-                      </span>
-                      <Button size="sm">
-                        Continue Learning
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-12">
-                <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {searchTerm ? 'No courses found' : 'No courses enrolled'}
-                </h3>
-                <p className="text-muted-foreground">
-                  {searchTerm 
-                    ? 'Try adjusting your search terms' 
-                    : 'Contact your tutor or admin to get enrolled in courses'
-                  }
-                </p>
+          {loading ? (
+            <div className="flex items-center justify-center min-h-[50vh]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading amazing courses...</p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredCourses.length > 0 ? (
+                filteredCourses.map((course) => {
+                  const enrollment = enrolledCourses.find(e => e.course_id === course.id);
+                  const isEnrolled = !!enrollment;
+                  
+                  return (
+                    <CourseCard
+                      key={course.id}
+                      course={course}
+                      enrollment={enrollment}
+                      isEnrolled={isEnrolled}
+                      onEnroll={() => {
+                        // This would trigger enrollment flow
+                        toast({
+                          title: "Enrollment Request",
+                          description: `Request to enroll in ${course.title} has been sent to your tutor.`,
+                        });
+                      }}
+                      onContinue={() => handleCourseClick(course.id)}
+                    />
+                  );
+                })
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    {searchTerm ? 'No courses found' : 'No courses available'}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {searchTerm 
+                      ? 'Try adjusting your search terms or filters' 
+                      : 'Check back later for new courses!'
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </LMSLayout>
   );
