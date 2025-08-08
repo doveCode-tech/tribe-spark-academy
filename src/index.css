@@ -2,42 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-/* STEMTribe LMS Design System - Modern, Tech-Inspired Education Platform */
+/* Kid-Friendly LMS Design System - Colorful, Fun, Educational */
 
 @layer base {
   :root {
     /* Core Background & Text */
-    --background: 220 15% 97%;
-    --foreground: 224 71% 4%;
+    --background: 190 100% 98%;
+    --foreground: 220 25% 15%;
 
     /* Card Components */
     --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
+    --card-foreground: 220 25% 15%;
 
     /* Popover Components */
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 4%;
+    --popover-foreground: 220 25% 15%;
 
-    /* Primary Brand Colors - Tech Blue */
-    --primary: 217 91% 60%;
+    /* Primary Brand Colors - Vibrant Blue */
+    --primary: 210 100% 60%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 217 91% 75%;
-    --primary-dark: 217 91% 45%;
+    --primary-light: 210 100% 75%;
+    --primary-dark: 210 100% 45%;
 
-    /* Secondary - Purple Accent */
-    --secondary: 262 83% 58%;
+    /* Secondary - Fun Purple */
+    --secondary: 270 100% 70%;
     --secondary-foreground: 0 0% 100%;
-    --secondary-light: 262 83% 73%;
-    --secondary-dark: 262 83% 43%;
+    --secondary-light: 270 100% 80%;
+    --secondary-dark: 270 100% 55%;
 
-    /* Success - Green for Achievements */
-    --success: 142 71% 45%;
+    /* Success - Bright Green */
+    --success: 120 100% 50%;
     --success-foreground: 0 0% 100%;
-    --success-light: 142 71% 60%;
+    --success-light: 120 100% 70%;
 
-    /* Warning - Orange for Notifications */
-    --warning: 38 92% 50%;
+    /* Warning - Sunny Orange */
+    --warning: 35 100% 60%;
     --warning-foreground: 0 0% 100%;
+
+    /* Fun Colors for Kids */
+    --pink: 320 100% 70%;
+    --pink-foreground: 0 0% 100%;
+    --yellow: 50 100% 65%;
+    --yellow-foreground: 220 25% 15%;
+    --cyan: 180 100% 60%;
+    --cyan-foreground: 0 0% 100%;
+    --orange: 25 100% 65%;
+    --orange-foreground: 0 0% 100%;
 
     /* Muted Colors */
     --muted: 220 14% 96%;
@@ -58,11 +68,16 @@
 
     --radius: 0.75rem;
 
-    /* Gradients for Visual Appeal */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
-    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--secondary-dark)));
-    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
+    /* Fun Gradients for Kids */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--cyan)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--pink)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)), hsl(var(--pink)));
     --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(var(--success-light)));
+    --gradient-rainbow: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)), hsl(var(--pink)), hsl(var(--warning)), hsl(var(--success)));
+    --gradient-course-python: linear-gradient(135deg, hsl(60 100% 75%), hsl(120 100% 75%));
+    --gradient-course-web: linear-gradient(135deg, hsl(210 100% 75%), hsl(270 100% 75%));
+    --gradient-course-ai: linear-gradient(135deg, hsl(300 100% 75%), hsl(240 100% 75%));
+    --gradient-course-scratch: linear-gradient(135deg, hsl(35 100% 75%), hsl(15 100% 75%));
 
     /* Shadows for Depth */
     --shadow-card: 0 4px 6px -1px hsl(var(--primary) / 0.1);
