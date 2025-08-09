@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { CourseCreator } from "./CourseCreator";
 import { PasswordReset } from "./PasswordReset";
 import { EnrollmentDialog } from "./EnrollmentDialog";
+import { TutorAssignDialog } from "./TutorAssignDialog";
+import { CodeTemplateEditor } from "./CodeTemplateEditor";
 
 interface Course {
   id: string;
@@ -232,7 +234,8 @@ export function AdminDashboard() {
                     </Badge>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">Edit</Button>
+                    <TutorAssignDialog courseId={course.id} users={users} onChange={fetchData} />
+                    <CodeTemplateEditor courseId={course.id} category={course.category} />
                     <Button variant="outline" size="sm">Lessons</Button>
                   </div>
                 </div>
