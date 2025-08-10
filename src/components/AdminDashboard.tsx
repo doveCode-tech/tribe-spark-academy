@@ -11,6 +11,7 @@ import { PasswordReset } from "./PasswordReset";
 import { EnrollmentDialog } from "./EnrollmentDialog";
 import { TutorAssignDialog } from "./TutorAssignDialog";
 import { CodeTemplateEditor } from "./CodeTemplateEditor";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Course {
   id: string;
@@ -50,11 +51,9 @@ export function AdminDashboard() {
 
       if (coursesError) throw coursesError;
 
-      // Fetch users
+      // Fetch users via secure admin RPC
       const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .rpc('admin_list_users');
 
       if (usersError) throw usersError;
 
@@ -255,16 +254,22 @@ export function AdminDashboard() {
           <div className="space-y-4">
             {users.map((user) => (
               <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div>
-                  <h4 className="font-medium">{user.name}</h4>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
-                  <div className="flex gap-2 mt-1">
-                    <Badge variant={user.role === 'admin' ? 'default' : user.role === 'tutor' ? 'secondary' : 'outline'}>
-                      {user.role}
-                    </Badge>
-                    <Badge variant={user.approved ? 'default' : 'destructive'}>
-                      {user.approved ? 'Approved' : 'Pending'}
-                    </Badge>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={(user as any)?.avatar_url || undefined} alt={user.name || user.email} />
+                    <AvatarFallback>{(user.name || user.email || '?').slice(0,2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h4 className="font-medium">{user.name}</h4>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                    <div className="flex gap-2 mt-1">
+                      <Badge variant={user.role === 'admin' ? 'default' : user.role === 'tutor' ? 'secondary' : 'outline'}>
+                        {user.role}
+                      </Badge>
+                      <Badge variant={user.approved ? 'default' : 'destructive'}>
+                        {user.approved ? 'Approved' : 'Pending'}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">

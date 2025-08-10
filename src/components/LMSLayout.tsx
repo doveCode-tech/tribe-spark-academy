@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Bell, Search, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface LMSLayoutProps {
   children: React.ReactNode;
@@ -52,6 +53,10 @@ export function LMSLayout({ children }: LMSLayoutProps) {
                      <Bell className="w-4 h-4" />
                    </Button>
                   
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={userProfile?.avatar_url || undefined} alt={userProfile?.name || userProfile?.email || 'User'} />
+                    <AvatarFallback>{(userProfile?.name || userProfile?.email || '?').slice(0,2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
                   <Button 
                     variant="outline" 
                     size="sm"

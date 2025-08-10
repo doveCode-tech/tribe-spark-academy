@@ -369,6 +369,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_list_users: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          approved: boolean
+          auth_user_id: string | null
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          created_by: string | null
+          email: string | null
+          first_name: string | null
+          id: string
+          last_login: string | null
+          last_name: string | null
+          name: string | null
+          phone: string | null
+          role: string | null
+        }[]
+      }
       is_admin: {
         Args: { user_id: string }
         Returns: boolean

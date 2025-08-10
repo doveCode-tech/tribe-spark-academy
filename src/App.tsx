@@ -16,6 +16,10 @@ import Register from "./pages/Register";
 import Profile from "./pages/Profile";
 import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
+import Analytics from "./pages/Analytics";
+import Users from "./pages/Users";
+import Settings from "./pages/Settings";
+import CreateTutor from "./pages/CreateTutor";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +67,26 @@ const App = () => (
             <Route path="/profile" element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            } />
+            <Route path="/analytics" element={
+              <ProtectedRoute>
+                <Analytics />
+              </ProtectedRoute>
+            } />
+            <Route path="/users" element={
+              <ProtectedRoute>
+                <Users />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
+            <Route path="/create-tutor" element={
+              <ProtectedRoute>
+                <CreateTutor />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
