@@ -125,6 +125,47 @@ export type Database = {
           },
         ]
       }
+      enrollment_requests: {
+        Row: {
+          course_id: string
+          id: string
+          note: string | null
+          processed_at: string | null
+          processed_by: string | null
+          requested_at: string
+          status: string
+          student_id: string
+        }
+        Insert: {
+          course_id: string
+          id?: string
+          note?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          requested_at?: string
+          status?: string
+          student_id: string
+        }
+        Update: {
+          course_id?: string
+          id?: string
+          note?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          requested_at?: string
+          status?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrollment_requests_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       enrollments: {
         Row: {
           course_id: string | null
@@ -265,6 +306,42 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          message: string
+          read: boolean
+          recipient_role: string | null
+          recipient_user_id: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          message: string
+          read?: boolean
+          recipient_role?: string | null
+          recipient_user_id?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          message?: string
+          read?: boolean
+          recipient_role?: string | null
+          recipient_user_id?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           course_id: string | null
@@ -369,6 +446,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_approve_enrollment_request: {
+        Args: { _request_id: string; _note?: string }
+        Returns: undefined
+      }
       admin_list_users: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -387,6 +468,14 @@ export type Database = {
           phone: string | null
           role: string | null
         }[]
+      }
+      admin_reject_enrollment_request: {
+        Args: { _request_id: string; _reason?: string }
+        Returns: undefined
+      }
+      admin_unenroll_student: {
+        Args: { _student_id: string; _course_id: string; _reason?: string }
+        Returns: undefined
       }
       is_admin: {
         Args: { user_id: string }
