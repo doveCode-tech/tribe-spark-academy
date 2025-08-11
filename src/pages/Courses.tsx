@@ -198,12 +198,20 @@ export default function Courses() {
                       course={course}
                       enrollment={enrollment}
                       isEnrolled={isEnrolled}
-                      onEnroll={() => {
-                        // This would trigger enrollment flow
-                        toast({
-                          title: "Enrollment Request",
-                          description: `Request to enroll in ${course.title} has been sent to your tutor.`,
-                        });
+                      onEnroll={async () => {
+                        try {
+                          const { error } = await supabase
+                            .from('enrollment_requests')
+                            .insert({ student_id: user!.id, course_id: course.id });
+                          if (error) throw error;
+                          toast({
+                            title: "Enrollment Request",
+                            description: `Request to enroll in ${course.title} was sent. You'll be notified once approved.`,
+                          });
+                        } catch (e: any) {
+                          console.error(e);
+                          toast({ title: 'Error', description: e.message || 'Failed to request enrollment', variant: 'destructive' });
+                        }
                       }}
                       onContinue={() => handleCourseClick(course.id)}
                     />

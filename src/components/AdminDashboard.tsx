@@ -12,7 +12,7 @@ import { EnrollmentDialog } from "./EnrollmentDialog";
 import { TutorAssignDialog } from "./TutorAssignDialog";
 import { CodeTemplateEditor } from "./CodeTemplateEditor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { UnenrollDialog } from "./UnenrollDialog";
 interface Course {
   id: string;
   title: string;
@@ -282,6 +282,7 @@ export function AdminDashboard() {
                       >
                         Make {user.role === 'student' ? 'Tutor' : 'Student'}
                       </Button>
+                      <UnenrollDialog userId={user.id} userName={user.name} onChange={fetchData} />
                       <Button 
                         variant="outline" 
                         size="sm"

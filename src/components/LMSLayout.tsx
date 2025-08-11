@@ -1,18 +1,18 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { LMSSidebar } from "@/components/LMSSidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, LogOut } from "lucide-react";
+import { Search, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { NotificationsBell } from "@/components/NotificationsBell";
 interface LMSLayoutProps {
   children: React.ReactNode;
 }
 
 export function LMSLayout({ children }: LMSLayoutProps) {
   const { signOut, userProfile } = useAuth();
-
+  
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -41,22 +41,13 @@ export function LMSLayout({ children }: LMSLayoutProps) {
                 
                 {/* User Actions */}
                  <div className="flex items-center space-x-2">
-                   <Button 
-                     variant="outline" 
-                     size="icon" 
-                     className="relative"
-                     onClick={() => {
-                       // TODO: Implement notifications panel
-                       console.log('Notifications clicked');
-                     }}
-                   >
-                     <Bell className="w-4 h-4" />
-                   </Button>
-                  
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={userProfile?.avatar_url || undefined} alt={userProfile?.name || userProfile?.email || 'User'} />
-                    <AvatarFallback>{(userProfile?.name || userProfile?.email || '?').slice(0,2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                   {/* Notifications */}
+                   <NotificationsBell />
+                   
+                   <Avatar className="h-8 w-8">
+                     <AvatarImage src={userProfile?.avatar_url || undefined} alt={userProfile?.name || userProfile?.email || 'User'} />
+                     <AvatarFallback>{(userProfile?.name || userProfile?.email || '?').slice(0,2).toUpperCase()}</AvatarFallback>
+                   </Avatar>
                   <Button 
                     variant="outline" 
                     size="sm"
