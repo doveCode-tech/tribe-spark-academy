@@ -346,6 +346,7 @@ export type Database = {
         Row: {
           course_id: string | null
           description: string | null
+          file_path: string | null
           id: string
           link: string | null
           screenshot: string | null
@@ -356,6 +357,7 @@ export type Database = {
         Insert: {
           course_id?: string | null
           description?: string | null
+          file_path?: string | null
           id?: string
           link?: string | null
           screenshot?: string | null
@@ -366,6 +368,7 @@ export type Database = {
         Update: {
           course_id?: string | null
           description?: string | null
+          file_path?: string | null
           id?: string
           link?: string | null
           screenshot?: string | null
@@ -448,6 +451,10 @@ export type Database = {
     Functions: {
       admin_approve_enrollment_request: {
         Args: { _request_id: string; _note?: string }
+        Returns: undefined
+      }
+      admin_approve_user: {
+        Args: { _auth_user_id: string }
         Returns: undefined
       }
       admin_list_users: {
