@@ -37,44 +37,55 @@ export function CourseCreator({ onCourseCreated }: CourseCreatorProps) {
     description: '',
     category: '',
   });
+  const [lessonTitle, setLessonTitle] = useState<string>('');
+  const [lessonInstructions, setLessonInstructions] = useState<string>('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
+      const { data: course, error } = await supabase
         .from('courses')
-        .insert([{
-          title: courseData.title,
-          description: courseData.description,
-          category: courseData.category,
-        }])
+        .insert([{ title: courseData.title, description: courseData.description, category: courseData.category }])
         .select()
         .single();
 
       if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Course created successfully!",
-      });
+      // Optionally create first lesson with uploaded video
+      if (course && (lessonTitle || lessonInstructions || videoFile)) {
+        let video_url: string | undefined;
+        if (videoFile) {
+          const path = `${course.id}/${Date.now()}-${videoFile.name}`;
+          const { error: upErr } = await supabase.storage.from('lesson-videos').upload(path, videoFile, { upsert: false });
+          if (upErr) throw upErr;
+          const { data: pub } = supabase.storage.from('lesson-videos').getPublicUrl(path);
+          video_url = pub.publicUrl;
+        }
+        const { error: lessonErr } = await supabase.from('lessons').insert({
+          course_id: course.id,
+          title: lessonTitle || 'Lesson 1',
+          description: lessonInstructions || null,
+          content: lessonInstructions || null,
+          video_url: video_url || null,
+          order_index: 1,
+        });
+        if (lessonErr) throw lessonErr;
+      }
 
-      setCourseData({
-        title: '',
-        description: '',
-        category: '',
-      });
-      
+      toast({ title: 'Success', description: 'Course created successfully!' });
+
+      setCourseData({ title: '', description: '', category: '' });
+      setLessonTitle('');
+      setLessonInstructions('');
+      setVideoFile(null);
       setOpen(false);
       onCourseCreated?.();
     } catch (error: any) {
       console.error('Error creating course:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create course",
-        variant: "destructive",
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to create course', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -143,6 +154,23 @@ export function CourseCreator({ onCourseCreated }: CourseCreatorProps) {
               required
               disabled={loading}
             />
+          </div>
+
+          {/* Optional first lesson */}
+          <div className="pt-2 border-t space-y-3">
+            <h4 className="font-medium">Add First Lesson (optional) 🎥</h4>
+            <div className="space-y-2">
+              <Label htmlFor="lessonTitle">Lesson Title</Label>
+              <Input id="lessonTitle" value={lessonTitle} onChange={(e)=>setLessonTitle(e.target.value)} placeholder="e.g., Getting Started" disabled={loading} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lessonInstructions">Lesson Instructions</Label>
+              <Textarea id="lessonInstructions" value={lessonInstructions} onChange={(e)=>setLessonInstructions(e.target.value)} placeholder="Write friendly instructions for kids..." rows={4} disabled={loading} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="video">Upload Lesson Video</Label>
+              <Input id="video" type="file" accept="video/*" onChange={(e)=>setVideoFile(e.target.files?.[0] || null)} disabled={loading} />
+            </div>
           </div>
 
           <DialogFooter>

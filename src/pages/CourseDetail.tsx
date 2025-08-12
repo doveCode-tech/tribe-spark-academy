@@ -9,6 +9,7 @@ import { ArrowLeft, BookOpen, Clock, Play, CheckCircle, Lock } from 'lucide-reac
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { ProjectSubmission } from '@/components/ProjectSubmission';
 
 interface Lesson {
   id: string;
@@ -289,6 +290,9 @@ export default function CourseDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* Project Submission */}
+        {/* ... keep existing code (below) */}
       </div>
     </LMSLayout>
   );

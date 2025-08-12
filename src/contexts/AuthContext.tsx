@@ -62,15 +62,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           // Fetch user profile after auth state change
           setTimeout(async () => {
-            const profile = await fetchUserProfile(session.user.id);
+            let profile = await fetchUserProfile(session.user.id);
+
+            // If no profile exists yet, create a student profile for the user
+            if (!profile) {
+              const meta = session.user.user_metadata || {};
+              const fullName = meta.name || `${meta.first_name || ''} ${meta.last_name || ''}`.trim();
+              const insertRes = await supabase
+                .from('users')
+                .insert({
+                  auth_user_id: session.user.id,
+                  role: 'student',
+                  name: fullName || session.user.email,
+                  email: session.user.email,
+                  approved: Boolean(session.user.email_confirmed_at) || false,
+                })
+                .select('*')
+                .maybeSingle();
+              if (!insertRes.error) profile = insertRes.data;
+            }
+
+            // Auto-approve on confirmed email
+            if (profile && !profile.approved && session.user.email_confirmed_at) {
+              await supabase
+                .from('users')
+                .update({ approved: true })
+                .eq('auth_user_id', session.user.id);
+              profile = await fetchUserProfile(session.user.id);
+            }
+
             setUserProfile(profile);
             setLoading(false);
-            
+
             // Show welcome message only on login event
-            if (event === 'SIGNED_IN' && profile?.name) {
+            if (event === 'SIGNED_IN' && (profile?.name || session.user.email)) {
               toast({
-                title: `Welcome back, ${profile.name}!`,
-                description: "Successfully logged in.",
+                title: `Welcome back, ${profile?.name || session.user.email}!`,
+                description: 'Successfully logged in.',
               });
             }
           }, 0);

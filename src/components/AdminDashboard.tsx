@@ -275,6 +275,23 @@ export function AdminDashboard() {
                 <div className="flex gap-2">
                   {user.role !== 'admin' && (
                     <>
+                      {!user.approved && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const { error } = await supabase.rpc('admin_approve_user', { _auth_user_id: (user as any).auth_user_id });
+                              if (error) throw error;
+                              setUsers(users.map(u => u.id === user.id ? { ...u, approved: true } : u));
+                              toast({ title: 'Approved', description: 'User has been approved.' });
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: 'Error', description: 'Failed to approve user', variant: 'destructive' });
+                            }
+                          }}
+                        >Approve</Button>
+                      )}
                       <Button 
                         variant="outline" 
                         size="sm"

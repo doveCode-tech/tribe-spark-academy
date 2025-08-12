@@ -200,17 +200,43 @@ export default function Courses() {
                       isEnrolled={isEnrolled}
                       onEnroll={async () => {
                         try {
+                          // Check existing pending request to avoid duplicates
+                          const { data: existing } = await supabase
+                            .from('enrollment_requests')
+                            .select('id, status')
+                            .eq('student_id', user!.id)
+                            .eq('course_id', course.id)
+                            .eq('status', 'pending')
+                            .limit(1)
+                            .maybeSingle();
+
+                          if (existing) {
+                            toast({
+                              title: 'Already Requested',
+                              description: `You already asked to join ${course.title}. We'll notify you soon!`,
+                            });
+                            return;
+                          }
+
                           const { error } = await supabase
                             .from('enrollment_requests')
                             .insert({ student_id: user!.id, course_id: course.id });
                           if (error) throw error;
                           toast({
-                            title: "Enrollment Request",
+                            title: 'Enrollment Request Sent',
                             description: `Request to enroll in ${course.title} was sent. You'll be notified once approved.`,
                           });
                         } catch (e: any) {
-                          console.error(e);
-                          toast({ title: 'Error', description: e.message || 'Failed to request enrollment', variant: 'destructive' });
+                          const msg = String(e?.message || '')
+                          if (msg.includes('uniq_pending_enrollment_request') || msg.includes('duplicate key value')) {
+                            toast({
+                              title: 'Already Requested',
+                              description: `You already asked to join ${course.title}. We'll notify you soon!`,
+                            });
+                          } else {
+                            console.error(e);
+                            toast({ title: 'Error', description: msg || 'Failed to request enrollment', variant: 'destructive' });
+                          }
                         }
                       }}
                       onContinue={() => handleCourseClick(course.id)}
