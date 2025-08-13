@@ -292,7 +292,7 @@ export default function CourseDetail() {
         </Card>
 
         {/* Project Submission */}
-        {/* ... keep existing code (below) */}
+        <ProjectSubmission courseId={course.id} />
       </div>
     </LMSLayout>
   );
