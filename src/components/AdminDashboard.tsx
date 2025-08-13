@@ -13,6 +13,9 @@ import { TutorAssignDialog } from "./TutorAssignDialog";
 import { CodeTemplateEditor } from "./CodeTemplateEditor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UnenrollDialog } from "./UnenrollDialog";
+import { BulkUserRegistration } from "./BulkUserRegistration";
+import { AdminOnly, UltimateTutorAndAbove } from "./RoleBasedAccess";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 interface Course {
   id: string;
   title: string;
@@ -28,6 +31,11 @@ interface User {
   role: string;
   approved: boolean;
   created_at: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  role_level?: number;
+  auth_user_id: string;
 }
 
 export function AdminDashboard() {
@@ -95,19 +103,19 @@ export function AdminDashboard() {
     }
   };
 
-  const toggleUserRole = async (userId: string, currentRole: string) => {
-    const newRole = currentRole === 'student' ? 'tutor' : 'student';
-    
+  const updateUserRole = async (userId: string, newRole: string) => {
     try {
+      const roleLevel = newRole === 'student' ? 1 : newRole === 'tutor' ? 2 : newRole === 'ultimate_tutor' ? 3 : 4;
+      
       const { error } = await supabase
         .from('users')
-        .update({ role: newRole })
+        .update({ role: newRole, role_level: roleLevel })
         .eq('id', userId);
 
       if (error) throw error;
 
       setUsers(users.map(user => 
-        user.id === userId ? { ...user, role: newRole } : user
+        user.id === userId ? { ...user, role: newRole, role_level: roleLevel } : user
       ));
       
       toast({
@@ -119,6 +127,35 @@ export function AdminDashboard() {
       toast({
         title: "Error",
         description: "Failed to update user role",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resetUserPassword = async (userEmail: string) => {
+    try {
+      // Create notification for password reset request
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          recipient_role: 'admin',
+          type: 'password_reset_request',
+          title: 'Password Reset Request',
+          message: `Password reset requested for: ${userEmail}`,
+          data: { user_email: userEmail }
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Password Reset",
+        description: "Password reset request created. Check notifications for follow-up.",
+      });
+    } catch (error) {
+      console.error('Error creating password reset request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create password reset request",
         variant: "destructive",
       });
     }
@@ -201,13 +238,18 @@ export function AdminDashboard() {
               <CardTitle>Course Management</CardTitle>
               <CardDescription>Create and manage courses</CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <EnrollmentDialog 
                 courses={courses} 
                 users={users} 
                 onEnrollmentComplete={fetchData} 
               />
-              <CourseCreator onCourseCreated={fetchData} />
+              <AdminOnly>
+                <CourseCreator onCourseCreated={fetchData} />
+              </AdminOnly>
+              <AdminOnly>
+                <BulkUserRegistration onComplete={fetchData} />
+              </AdminOnly>
             </div>
           </div>
         </CardHeader>
@@ -260,11 +302,20 @@ export function AdminDashboard() {
                     <AvatarFallback>{(user.name || user.email || '?').slice(0,2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <h4 className="font-medium">{user.name}</h4>
+                    <h4 className="font-medium">
+                      {user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email}
+                    </h4>
                     <p className="text-sm text-muted-foreground">{user.email}</p>
+                    {user.username && (
+                      <p className="text-xs text-muted-foreground">@{user.username}</p>
+                    )}
                     <div className="flex gap-2 mt-1">
-                      <Badge variant={user.role === 'admin' ? 'default' : user.role === 'tutor' ? 'secondary' : 'outline'}>
-                        {user.role}
+                      <Badge variant={
+                        user.role === 'admin' ? 'default' : 
+                        user.role === 'ultimate_tutor' ? 'secondary' :
+                        user.role === 'tutor' ? 'secondary' : 'outline'
+                      }>
+                        {user.role === 'ultimate_tutor' ? 'Ultimate Tutor' : user.role}
                       </Badge>
                       <Badge variant={user.approved ? 'default' : 'destructive'}>
                         {user.approved ? 'Approved' : 'Pending'}
@@ -272,7 +323,7 @@ export function AdminDashboard() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {user.role !== 'admin' && (
                     <>
                       {!user.approved && (
@@ -281,7 +332,7 @@ export function AdminDashboard() {
                           size="sm"
                           onClick={async () => {
                             try {
-                              const { error } = await supabase.rpc('admin_approve_user', { _auth_user_id: (user as any).auth_user_id });
+                              const { error } = await supabase.rpc('admin_approve_user', { _auth_user_id: user.auth_user_id });
                               if (error) throw error;
                               setUsers(users.map(u => u.id === user.id ? { ...u, approved: true } : u));
                               toast({ title: 'Approved', description: 'User has been approved.' });
@@ -292,21 +343,39 @@ export function AdminDashboard() {
                           }}
                         >Approve</Button>
                       )}
+                      
+                      <Select onValueChange={(newRole) => updateUserRole(user.id, newRole)}>
+                        <SelectTrigger className="w-40">
+                          <SelectValue placeholder={user.role === 'ultimate_tutor' ? 'Ultimate Tutor' : user.role} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="student">Student</SelectItem>
+                          <SelectItem value="tutor">Tutor</SelectItem>
+                          <AdminOnly>
+                            <SelectItem value="ultimate_tutor">Ultimate Tutor</SelectItem>
+                          </AdminOnly>
+                        </SelectContent>
+                      </Select>
+
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => toggleUserRole(user.id, user.role)}
+                        onClick={() => resetUserPassword(user.email)}
                       >
-                        Make {user.role === 'student' ? 'Tutor' : 'Student'}
+                        Reset Password
                       </Button>
+                      
                       <UnenrollDialog userId={user.id} userName={user.name} onChange={fetchData} />
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => deleteUser(user.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      
+                      <AdminOnly>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => deleteUser(user.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </AdminOnly>
                     </>
                   )}
                 </div>

@@ -409,6 +409,8 @@ export type Database = {
           name: string | null
           phone: string | null
           role: string | null
+          role_level: number | null
+          username: string | null
         }
         Insert: {
           approved: boolean
@@ -425,6 +427,8 @@ export type Database = {
           name?: string | null
           phone?: string | null
           role?: string | null
+          role_level?: number | null
+          username?: string | null
         }
         Update: {
           approved?: boolean
@@ -441,6 +445,8 @@ export type Database = {
           name?: string | null
           phone?: string | null
           role?: string | null
+          role_level?: number | null
+          username?: string | null
         }
         Relationships: []
       }
@@ -455,6 +461,10 @@ export type Database = {
       }
       admin_approve_user: {
         Args: { _auth_user_id: string }
+        Returns: undefined
+      }
+      admin_enroll_user: {
+        Args: { _user_id: string; _course_id: string }
         Returns: undefined
       }
       admin_list_users: {
@@ -474,6 +484,8 @@ export type Database = {
           name: string | null
           phone: string | null
           role: string | null
+          role_level: number | null
+          username: string | null
         }[]
       }
       admin_reject_enrollment_request: {
@@ -484,7 +496,34 @@ export type Database = {
         Args: { _student_id: string; _course_id: string; _reason?: string }
         Returns: undefined
       }
+      check_enrollment_request_status: {
+        Args: { _request_id: string }
+        Returns: string
+      }
+      cleanup_resolved_notifications: {
+        Args: { _request_id: string }
+        Returns: undefined
+      }
+      get_unresolved_enrollment_notifications: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          recipient_user_id: string
+          recipient_role: string
+          type: string
+          title: string
+          message: string
+          read: boolean
+          created_at: string
+          data: Json
+          request_status: string
+        }[]
+      }
       is_admin: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
+      is_ultimate_tutor_or_admin: {
         Args: { user_id: string }
         Returns: boolean
       }

@@ -11,6 +11,7 @@ import { CourseCard } from "@/components/CourseCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { EnhancedEnrollmentDialog } from "@/components/EnhancedEnrollmentDialog";
 
 export default function Courses() {
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
@@ -18,9 +19,12 @@ export default function Courses() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  const isAdmin = userProfile?.role === 'admin';
+  const isUltimateTutor = userProfile?.role_level >= 3;
 
   useEffect(() => {
     if (user) {
@@ -198,6 +202,14 @@ export default function Courses() {
                       course={course}
                       enrollment={enrollment}
                       isEnrolled={isEnrolled}
+                      customEnrollButton={
+                        (isAdmin || isUltimateTutor) ? (
+                          <EnhancedEnrollmentDialog 
+                            course={course} 
+                            triggerLabel="Manage Enrollments"
+                          />
+                        ) : undefined
+                      }
                       onEnroll={async () => {
                         try {
                           // Check existing pending request to avoid duplicates

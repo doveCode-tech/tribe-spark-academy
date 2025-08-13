@@ -19,6 +19,7 @@ interface CourseCardProps {
   onEnroll?: () => void;
   onContinue?: () => void;
   isEnrolled?: boolean;
+  customEnrollButton?: React.ReactNode;
 }
 
 const getCourseGradient = (category: string) => {
@@ -53,7 +54,7 @@ const getCourseEmoji = (category: string) => {
   return emojis[category] || '📚';
 };
 
-export function CourseCard({ course, enrollment, onEnroll, onContinue, isEnrolled }: CourseCardProps) {
+export function CourseCard({ course, enrollment, onEnroll, onContinue, isEnrolled, customEnrollButton }: CourseCardProps) {
   const progress = enrollment?.progress_percentage || 0;
   const emoji = getCourseEmoji(course.category);
   const gradient = getCourseGradient(course.category);
@@ -116,6 +117,10 @@ export function CourseCard({ course, enrollment, onEnroll, onContinue, isEnrolle
                 <Play className="w-4 h-4 mr-2" />
                 {progress === 0 ? 'Start Learning' : 'Continue Learning'}
               </Button>
+            ) : customEnrollButton ? (
+              <div className="w-full">
+                {customEnrollButton}
+              </div>
             ) : (
               <Button 
                 variant="outline" 

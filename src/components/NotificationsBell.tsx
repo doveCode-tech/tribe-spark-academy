@@ -27,20 +27,42 @@ export function NotificationsBell() {
 
   const load = async () => {
     try {
-      // Admins see admin role notifications; everyone sees user-targeted ones
-      const orFilter = isAdmin
-        ? `recipient_role.eq.admin,recipient_user_id.eq.${userProfile?.auth_user_id}`
-        : `recipient_user_id.eq.${userProfile?.auth_user_id}`;
+      if (isAdmin) {
+        // For admins, get only unresolved enrollment requests using the new function
+        const { data: enrollmentData, error: enrollmentError } = await supabase
+          .rpc('get_unresolved_enrollment_notifications');
+        
+        if (enrollmentError) throw enrollmentError;
+        
+        // Also get other admin notifications
+        const { data: otherData, error: otherError } = await supabase
+          .from('notifications')
+          .select('*')
+          .neq('type', 'enrollment_request')
+          .or(`recipient_role.eq.admin,recipient_user_id.eq.${userProfile?.auth_user_id}`)
+          .order('created_at', { ascending: false })
+          .limit(25);
+          
+        if (otherError) throw otherError;
+        
+        // Combine and sort results
+        const combined = [...(enrollmentData || []), ...(otherData || [])]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 25);
+        
+        setItems(combined as any);
+      } else {
+        // For regular users, get their notifications
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('recipient_user_id', userProfile?.auth_user_id)
+          .order('created_at', { ascending: false })
+          .limit(25);
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .or(orFilter)
-        .order('created_at', { ascending: false })
-        .limit(25);
-
-      if (error) throw error;
-      setItems(data as any);
+        if (error) throw error;
+        setItems(data as any);
+      }
     } catch (e: any) {
       console.error('Failed to load notifications', e);
     }
@@ -73,10 +95,34 @@ export function NotificationsBell() {
   const approve = async (n: NotificationRow) => {
     try {
       const requestId = n.data?.request_id as string;
+      
+      // Check if already resolved
+      const { data: statusCheck } = await supabase.rpc('check_enrollment_request_status', { 
+        _request_id: requestId 
+      });
+      
+      if (statusCheck === 'approved' || statusCheck === 'rejected') {
+        // Remove the notification since it's already resolved
+        await supabase.rpc('cleanup_resolved_notifications', { _request_id: requestId });
+        toast({ title: 'Already Resolved', description: 'This request was already processed.' });
+        load(); // Refresh notifications
+        return;
+      }
+      
+      if (statusCheck === 'not_found') {
+        await supabase.rpc('cleanup_resolved_notifications', { _request_id: requestId });
+        toast({ title: 'Request Not Found', description: 'This enrollment request no longer exists.' });
+        load();
+        return;
+      }
+
       const { error } = await supabase.rpc('admin_approve_enrollment_request', { _request_id: requestId });
       if (error) throw error;
+      
       await markRead(n.id);
+      await supabase.rpc('cleanup_resolved_notifications', { _request_id: requestId });
       toast({ title: 'Approved', description: 'Enrollment approved.' });
+      load(); // Refresh to remove processed notifications
     } catch (e: any) {
       console.error(e);
       toast({ title: 'Error', description: e.message || 'Failed to approve', variant: 'destructive' });
@@ -86,10 +132,33 @@ export function NotificationsBell() {
   const reject = async (n: NotificationRow) => {
     try {
       const requestId = n.data?.request_id as string;
+      
+      // Check if already resolved
+      const { data: statusCheck } = await supabase.rpc('check_enrollment_request_status', { 
+        _request_id: requestId 
+      });
+      
+      if (statusCheck === 'approved' || statusCheck === 'rejected') {
+        await supabase.rpc('cleanup_resolved_notifications', { _request_id: requestId });
+        toast({ title: 'Already Resolved', description: 'This request was already processed.' });
+        load();
+        return;
+      }
+      
+      if (statusCheck === 'not_found') {
+        await supabase.rpc('cleanup_resolved_notifications', { _request_id: requestId });
+        toast({ title: 'Request Not Found', description: 'This enrollment request no longer exists.' });
+        load();
+        return;
+      }
+
       const { error } = await supabase.rpc('admin_reject_enrollment_request', { _request_id: requestId });
       if (error) throw error;
+      
       await markRead(n.id);
+      await supabase.rpc('cleanup_resolved_notifications', { _request_id: requestId });
       toast({ title: 'Rejected', description: 'Enrollment rejected.' });
+      load();
     } catch (e: any) {
       console.error(e);
       toast({ title: 'Error', description: e.message || 'Failed to reject', variant: 'destructive' });
