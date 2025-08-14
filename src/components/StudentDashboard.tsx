@@ -67,9 +67,20 @@ export function StudentDashboard() {
   };
 
   const fetchAchievements = async () => {
-    // For now, achievements will be empty by default
-    // This can be implemented when the achievements system is built
-    setAchievements([]);
+    try {
+      const { data } = await supabase
+        .from('student_badges')
+        .select(`
+          earned_at,
+          badges(*)
+        `)
+        .eq('student_id', userProfile?.auth_user_id);
+      
+      setAchievements(data?.map(b => ({ ...b.badges, earned_at: b.earned_at })) || []);
+    } catch (error) {
+      console.error('Error fetching achievements:', error);
+      setAchievements([]);
+    }
   };
 
   const fetchPortfolioProjects = async () => {

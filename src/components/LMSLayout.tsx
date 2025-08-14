@@ -1,11 +1,11 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { LMSSidebar } from "@/components/LMSSidebar";
 import { Button } from "@/components/ui/button";
-import { Search, LogOut } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { SearchBar } from "@/components/SearchBar";
 interface LMSLayoutProps {
   children: React.ReactNode;
 }
@@ -32,11 +32,7 @@ export function LMSLayout({ children }: LMSLayoutProps) {
               <div className="flex items-center space-x-4">
                 {/* Search Bar */}
                 <div className="relative hidden md:block">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                  <Input 
-                    placeholder="Search courses, lessons..." 
-                    className="pl-10 w-64"
-                  />
+                  <SearchBar />
                 </div>
                 
                 {/* User Actions */}

@@ -7,13 +7,97 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
   public: {
     Tables: {
+      badges: {
+        Row: {
+          color: string | null
+          created_at: string
+          criteria: Json | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          criteria?: Json | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          criteria?: Json | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      certificates: {
+        Row: {
+          certificate_data: Json | null
+          completion_date: string
+          course_id: string | null
+          course_title: string
+          founder_name: string | null
+          id: string
+          issued_at: string
+          quiz_attempt_id: string | null
+          student_id: string
+          student_name: string
+        }
+        Insert: {
+          certificate_data?: Json | null
+          completion_date?: string
+          course_id?: string | null
+          course_title: string
+          founder_name?: string | null
+          id?: string
+          issued_at?: string
+          quiz_attempt_id?: string | null
+          student_id: string
+          student_name: string
+        }
+        Update: {
+          certificate_data?: Json | null
+          completion_date?: string
+          course_id?: string | null
+          course_title?: string
+          founder_name?: string | null
+          id?: string
+          issued_at?: string
+          quiz_attempt_id?: string | null
+          student_id?: string
+          student_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_quiz_attempt_id_fkey"
+            columns: ["quiz_attempt_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_attempts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       code_templates: {
         Row: {
           course_id: string
@@ -218,6 +302,85 @@ export type Database = {
           },
         ]
       }
+      game_scores: {
+        Row: {
+          completed: boolean
+          game_id: string | null
+          id: string
+          played_at: string
+          score: number
+          student_id: string
+        }
+        Insert: {
+          completed?: boolean
+          game_id?: string | null
+          id?: string
+          played_at?: string
+          score?: number
+          student_id: string
+        }
+        Update: {
+          completed?: boolean
+          game_id?: string | null
+          id?: string
+          played_at?: string
+          score?: number
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_scores_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      games: {
+        Row: {
+          course_id: string | null
+          created_at: string
+          description: string | null
+          game_data: Json
+          game_type: string
+          id: string
+          lesson_number: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          game_data?: Json
+          game_type: string
+          id?: string
+          lesson_number: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          game_data?: Json
+          game_type?: string
+          id?: string
+          lesson_number?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "games_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_progress: {
         Row: {
           completed: boolean | null
@@ -262,39 +425,48 @@ export type Database = {
       lessons: {
         Row: {
           content: string | null
+          content_type: string | null
           course_id: string | null
           created_at: string
           description: string | null
           duration_minutes: number | null
+          exercises: Json | null
           id: string
           order_index: number
           title: string
           updated_at: string
           video_url: string | null
+          video_urls: string[] | null
         }
         Insert: {
           content?: string | null
+          content_type?: string | null
           course_id?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number | null
+          exercises?: Json | null
           id?: string
           order_index?: number
           title: string
           updated_at?: string
           video_url?: string | null
+          video_urls?: string[] | null
         }
         Update: {
           content?: string | null
+          content_type?: string | null
           course_id?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number | null
+          exercises?: Json | null
           id?: string
           order_index?: number
           title?: string
           updated_at?: string
           video_url?: string | null
+          video_urls?: string[] | null
         }
         Relationships: [
           {
@@ -342,6 +514,39 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolios: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_public: boolean | null
+          student_id: string
+          theme_color: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          student_id: string
+          theme_color?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          student_id?: string
+          theme_color?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           course_id: string | null
@@ -349,6 +554,7 @@ export type Database = {
           file_path: string | null
           id: string
           link: string | null
+          portfolio_id: string | null
           screenshot: string | null
           student_id: string | null
           submitted_at: string | null
@@ -360,6 +566,7 @@ export type Database = {
           file_path?: string | null
           id?: string
           link?: string | null
+          portfolio_id?: string | null
           screenshot?: string | null
           student_id?: string | null
           submitted_at?: string | null
@@ -371,6 +578,7 @@ export type Database = {
           file_path?: string | null
           id?: string
           link?: string | null
+          portfolio_id?: string | null
           screenshot?: string | null
           student_id?: string | null
           submitted_at?: string | null
@@ -385,10 +593,206 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "projects_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "projects_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_attempts: {
+        Row: {
+          answers: Json
+          attempt_number: number
+          completed_at: string | null
+          course_id: string | null
+          created_at: string
+          id: string
+          passed: boolean
+          quiz_id: string | null
+          score: number
+          started_at: string
+          student_id: string
+        }
+        Insert: {
+          answers?: Json
+          attempt_number?: number
+          completed_at?: string | null
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          passed?: boolean
+          quiz_id?: string | null
+          score?: number
+          started_at?: string
+          student_id: string
+        }
+        Update: {
+          answers?: Json
+          attempt_number?: number
+          completed_at?: string | null
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          passed?: boolean
+          quiz_id?: string | null
+          score?: number
+          started_at?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_attempts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_attempts_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quizzes: {
+        Row: {
+          attempts_allowed: number | null
+          course_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          pass_percentage: number | null
+          questions: Json
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          attempts_allowed?: number | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          pass_percentage?: number | null
+          questions?: Json
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts_allowed?: number | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          pass_percentage?: number | null
+          questions?: Json
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quizzes_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          content: string
+          course_id: string | null
+          created_at: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_comments: string | null
+          status: string | null
+          student_id: string
+          submitted_at: string | null
+          title: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_comments?: string | null
+          status?: string | null
+          student_id: string
+          submitted_at?: string | null
+          title: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_comments?: string | null
+          status?: string | null
+          student_id?: string
+          submitted_at?: string | null
+          title?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_badges: {
+        Row: {
+          awarded_by: string | null
+          badge_id: string | null
+          earned_at: string
+          id: string
+          student_id: string
+        }
+        Insert: {
+          awarded_by?: string | null
+          badge_id?: string | null
+          earned_at?: string
+          id?: string
+          student_id: string
+        }
+        Update: {
+          awarded_by?: string | null
+          badge_id?: string | null
+          earned_at?: string
+          id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
             referencedColumns: ["id"]
           },
         ]
@@ -399,17 +803,21 @@ export type Database = {
           auth_user_id: string | null
           avatar_url: string | null
           bio: string | null
+          city: string | null
+          country: string | null
           created_at: string | null
           created_by: string | null
           email: string | null
           first_name: string | null
           id: string
+          last_access: string | null
           last_login: string | null
           last_name: string | null
           name: string | null
           phone: string | null
           role: string | null
           role_level: number | null
+          suspended: boolean | null
           username: string | null
         }
         Insert: {
@@ -417,17 +825,21 @@ export type Database = {
           auth_user_id?: string | null
           avatar_url?: string | null
           bio?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string | null
           created_by?: string | null
           email?: string | null
           first_name?: string | null
           id?: string
+          last_access?: string | null
           last_login?: string | null
           last_name?: string | null
           name?: string | null
           phone?: string | null
           role?: string | null
           role_level?: number | null
+          suspended?: boolean | null
           username?: string | null
         }
         Update: {
@@ -435,17 +847,21 @@ export type Database = {
           auth_user_id?: string | null
           avatar_url?: string | null
           bio?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string | null
           created_by?: string | null
           email?: string | null
           first_name?: string | null
           id?: string
+          last_access?: string | null
           last_login?: string | null
           last_name?: string | null
           name?: string | null
           phone?: string | null
           role?: string | null
           role_level?: number | null
+          suspended?: boolean | null
           username?: string | null
         }
         Relationships: []
@@ -456,7 +872,7 @@ export type Database = {
     }
     Functions: {
       admin_approve_enrollment_request: {
-        Args: { _request_id: string; _note?: string }
+        Args: { _note?: string; _request_id: string }
         Returns: undefined
       }
       admin_approve_user: {
@@ -464,7 +880,7 @@ export type Database = {
         Returns: undefined
       }
       admin_enroll_user: {
-        Args: { _user_id: string; _course_id: string }
+        Args: { _course_id: string; _user_id: string }
         Returns: undefined
       }
       admin_list_users: {
@@ -474,26 +890,38 @@ export type Database = {
           auth_user_id: string | null
           avatar_url: string | null
           bio: string | null
+          city: string | null
+          country: string | null
           created_at: string | null
           created_by: string | null
           email: string | null
           first_name: string | null
           id: string
+          last_access: string | null
           last_login: string | null
           last_name: string | null
           name: string | null
           phone: string | null
           role: string | null
           role_level: number | null
+          suspended: boolean | null
           username: string | null
         }[]
       }
       admin_reject_enrollment_request: {
-        Args: { _request_id: string; _reason?: string }
+        Args: { _reason?: string; _request_id: string }
+        Returns: undefined
+      }
+      admin_suspend_user: {
+        Args: { _suspended?: boolean; _user_id: string }
         Returns: undefined
       }
       admin_unenroll_student: {
-        Args: { _student_id: string; _course_id: string; _reason?: string }
+        Args: { _course_id: string; _reason?: string; _student_id: string }
+        Returns: undefined
+      }
+      award_badge: {
+        Args: { _badge_id: string; _student_id: string }
         Returns: undefined
       }
       check_enrollment_request_status: {
@@ -504,19 +932,27 @@ export type Database = {
         Args: { _request_id: string }
         Returns: undefined
       }
+      generate_certificate: {
+        Args: {
+          _course_id: string
+          _quiz_attempt_id: string
+          _student_id: string
+        }
+        Returns: string
+      }
       get_unresolved_enrollment_notifications: {
         Args: Record<PropertyKey, never>
         Returns: {
-          id: string
-          recipient_user_id: string
-          recipient_role: string
-          type: string
-          title: string
-          message: string
-          read: boolean
           created_at: string
           data: Json
+          id: string
+          message: string
+          read: boolean
+          recipient_role: string
+          recipient_user_id: string
           request_status: string
+          title: string
+          type: string
         }[]
       }
       is_admin: {

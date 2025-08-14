@@ -291,6 +291,21 @@ export default function CourseDetail() {
           </CardContent>
         </Card>
 
+        {/* Quiz Section */}
+        {progress === 100 && (
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <CheckCircle className="w-5 h-5 mr-2 text-success" />
+                Final Quiz
+              </CardTitle>
+              <CardDescription>
+                Complete the course quiz to earn your certificate (70% required to pass)
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
         {/* Project Submission */}
         <ProjectSubmission courseId={course.id} />
       </div>

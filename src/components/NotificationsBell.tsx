@@ -166,15 +166,17 @@ export function NotificationsBell() {
   };
 
   const unread = items.filter(i => !i.read).length;
+  const unresolvedCount = items.filter(i => !i.read && i.type === 'enrollment_request').length;
+  const displayCount = isAdmin ? unresolvedCount : unread;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon" className="relative">
           <Bell className="w-4 h-4" />
-          {unread > 0 && (
+          {displayCount > 0 && (
             <span className="absolute -top-1 -right-1 inline-flex items-center justify-center text-[10px] font-medium rounded-full bg-primary text-primary-foreground h-4 min-w-4 px-1">
-              {unread}
+              {displayCount}
             </span>
           )}
         </Button>
@@ -182,7 +184,7 @@ export function NotificationsBell() {
       <DropdownMenuContent className="w-96" align="end">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notifications</span>
-          <Badge variant="secondary">{unread} new</Badge>
+          {displayCount > 0 && <Badge variant="secondary">{displayCount} new</Badge>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.length === 0 && (
