@@ -9,7 +9,7 @@ interface AuthContextType {
   userProfile: any | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, name: string, additionalData?: { phone?: string; city?: string; country?: string }) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -75,6 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   role: 'student',
                   name: fullName || session.user.email,
                   email: session.user.email,
+                  first_name: meta.first_name || '',
+                  last_name: meta.last_name || '',
+                  phone: meta.phone || '',
+                  city: meta.city || '',
+                  country: meta.country || '',
                   approved: Boolean(session.user.email_confirmed_at) || false,
                 })
                 .select('*')
@@ -156,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, additionalData?: { phone?: string; city?: string; country?: string }) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
       
@@ -174,6 +179,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: fullName,
             first_name: firstName,
             last_name: lastName,
+            phone: additionalData?.phone || '',
+            city: additionalData?.city || '',
+            country: additionalData?.country || ''
           }
         }
       });

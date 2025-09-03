@@ -12,6 +12,9 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signUp, user } = useAuth();
@@ -28,7 +31,7 @@ export default function Register() {
     setLoading(true);
     
     const fullName = `${firstName} ${lastName}`.trim();
-    const { error } = await signUp(email, password, fullName);
+    const { error } = await signUp(email, password, fullName, { phone, city, country });
     
     if (!error) {
       navigate('/auth');
@@ -72,6 +75,46 @@ export default function Register() {
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Doe"
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 (555) 123-4567"
+                required
+                disabled={loading}
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="city">City/Town</Label>
+                <Input
+                  id="city"
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Your city"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="country">Country</Label>
+                <Input
+                  id="country"
+                  type="text"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="Your country"
                   required
                   disabled={loading}
                 />

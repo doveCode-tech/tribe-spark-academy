@@ -9,6 +9,9 @@ import { ArrowLeft, BookOpen, Clock, Play, CheckCircle, Lock } from 'lucide-reac
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { CourseProgressTracker } from '@/components/CourseProgressTracker';
+import { InCourseGames } from '@/components/InCourseGames';
+import { QuizInterface } from '@/components/QuizInterface';
 import { ProjectSubmission } from '@/components/ProjectSubmission';
 
 interface Lesson {
@@ -217,6 +220,9 @@ export default function CourseDetail() {
           </CardHeader>
         </Card>
 
+        {/* Course Progress Tracker */}
+        <CourseProgressTracker courseId={course.id} />
+
         {/* Lessons */}
         <Card className="shadow-card">
           <CardHeader>
@@ -230,55 +236,63 @@ export default function CourseDetail() {
           </CardHeader>
           <CardContent className="space-y-4">
             {lessons.map((lesson, index) => (
-              <div
-                key={lesson.id}
-                className={`border rounded-lg p-4 transition-all ${
-                  lesson.completed 
-                    ? 'bg-success/5 border-success/20' 
-                    : 'hover:shadow-md'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      lesson.completed 
-                        ? 'bg-success text-success-foreground' 
-                        : 'bg-muted'
-                    }`}>
-                      {lesson.completed ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : (
-                        <span className="text-sm font-medium">{index + 1}</span>
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">{lesson.title}</h4>
-                      <p className="text-sm text-muted-foreground">{lesson.description}</p>
-                      <div className="flex items-center text-xs text-muted-foreground mt-1">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {lesson.duration_minutes} minutes
+              <div key={lesson.id}>
+                <div
+                  className={`border rounded-lg p-4 transition-all ${
+                    lesson.completed 
+                      ? 'bg-success/5 border-success/20' 
+                      : 'hover:shadow-md'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        lesson.completed 
+                          ? 'bg-success text-success-foreground' 
+                          : 'bg-muted'
+                      }`}>
+                        {lesson.completed ? (
+                          <CheckCircle className="w-4 h-4" />
+                        ) : (
+                          <span className="text-sm font-medium">{index + 1}</span>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">{lesson.title}</h4>
+                        <p className="text-sm text-muted-foreground">{lesson.description}</p>
+                        <div className="flex items-center text-xs text-muted-foreground mt-1">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {lesson.duration_minutes} minutes
+                        </div>
                       </div>
                     </div>
+                    
+                    <Button
+                      size="sm"
+                      variant={lesson.completed ? "outline" : "default"}
+                      onClick={() => startLesson(lesson.id)}
+                    >
+                      {lesson.completed ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Completed
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          Start Lesson
+                        </>
+                      )}
+                    </Button>
                   </div>
-                  
-                  <Button
-                    size="sm"
-                    variant={lesson.completed ? "outline" : "default"}
-                    onClick={() => startLesson(lesson.id)}
-                  >
-                    {lesson.completed ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Completed
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4 mr-2" />
-                        Start Lesson
-                      </>
-                    )}
-                  </Button>
                 </div>
+                
+                {/* Mini-games after lessons 3 and 7 */}
+                {(index + 1 === 3 || index + 1 === 7) && lesson.completed && (
+                  <div className="mt-4">
+                    <InCourseGames courseId={course.id} lessonNumber={index + 1} />
+                  </div>
+                )}
               </div>
             ))}
             
@@ -291,7 +305,7 @@ export default function CourseDetail() {
           </CardContent>
         </Card>
 
-        {/* Quiz Section */}
+        {/* Quiz Section - Coming Soon */}
         {progress === 100 && (
           <Card className="shadow-card">
             <CardHeader>
@@ -303,6 +317,9 @@ export default function CourseDetail() {
                 Complete the course quiz to earn your certificate (70% required to pass)
               </CardDescription>
             </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Quiz interface will be available soon!</p>
+            </CardContent>
           </Card>
         )}
 

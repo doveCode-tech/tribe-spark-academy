@@ -14,6 +14,7 @@ import { CodeTemplateEditor } from "./CodeTemplateEditor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UnenrollDialog } from "./UnenrollDialog";
 import { BulkUserRegistration } from "./BulkUserRegistration";
+import { SuspendUserDialog } from "./SuspendUserDialog";
 import { AdminOnly, UltimateTutorAndAbove } from "./RoleBasedAccess";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 interface Course {
@@ -36,6 +37,11 @@ interface User {
   last_name?: string;
   role_level?: number;
   auth_user_id: string;
+  phone?: string;
+  city?: string;
+  country?: string;
+  last_access?: string;
+  suspended?: boolean;
 }
 
 export function AdminDashboard() {
@@ -309,7 +315,7 @@ export function AdminDashboard() {
                     {user.username && (
                       <p className="text-xs text-muted-foreground">@{user.username}</p>
                     )}
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 flex-wrap">
                       <Badge variant={
                         user.role === 'admin' ? 'default' : 
                         user.role === 'ultimate_tutor' ? 'secondary' :
@@ -320,6 +326,16 @@ export function AdminDashboard() {
                       <Badge variant={user.approved ? 'default' : 'destructive'}>
                         {user.approved ? 'Approved' : 'Pending'}
                       </Badge>
+                      {user.suspended && (
+                        <Badge variant="destructive">Suspended</Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1 mt-2">
+                      {user.phone && <div>📞 {user.phone}</div>}
+                      {user.city && user.country && <div>📍 {user.city}, {user.country}</div>}
+                      {user.last_access && (
+                        <div>🕒 Last seen: {new Date(user.last_access).toLocaleDateString()}</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -366,6 +382,10 @@ export function AdminDashboard() {
                       </Button>
                       
                       <UnenrollDialog userId={user.id} userName={user.name} onChange={fetchData} />
+                      
+                      <UltimateTutorAndAbove>
+                        <SuspendUserDialog user={user} onSuccess={fetchData} />
+                      </UltimateTutorAndAbove>
                       
                       <AdminOnly>
                         <Button 
