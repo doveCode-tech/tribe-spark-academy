@@ -55,9 +55,24 @@ export function EnhancedEnrollmentDialog({ course, triggerLabel = "Manage Enroll
 
   const loadUsers = async () => {
     try {
-      const { data, error } = await supabase.rpc('admin_list_users');
+      // For now, get users directly from the users table since admin_list_users might have issues
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
       if (error) throw error;
-      setUsers(data || []);
+      setUsers(data?.map(user => ({
+        id: user.id,
+        name: user.name || `${user.first_name} ${user.last_name}`.trim() || user.email,
+        email: user.email,
+        role: user.role,
+        approved: user.approved,
+        username: user.username,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        avatar_url: user.avatar_url,
+        auth_user_id: user.auth_user_id
+      })) || []);
     } catch (e: any) {
       console.error('Error loading users:', e);
       toast({ title: 'Error', description: 'Failed to load users', variant: 'destructive' });
