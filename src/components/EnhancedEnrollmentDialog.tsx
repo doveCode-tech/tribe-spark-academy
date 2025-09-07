@@ -97,12 +97,35 @@ export function EnhancedEnrollmentDialog({ course, triggerLabel = "Manage Enroll
   const enrollUser = async (userId: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.rpc('admin_enroll_user', {
-        _user_id: userId,
-        _course_id: course.id
-      });
       
-      if (error) throw error;
+      // Direct enrollment without using the RPC function for now
+      const { error } = await supabase
+        .from('enrollments')
+        .insert({
+          student_id: userId,
+          course_id: course.id,
+          status: 'active',
+          enrolled_by: userProfile?.auth_user_id
+        });
+      
+      if (error) {
+        // If user is already enrolled, update the status
+        if (error.code === '23505') { // unique violation
+          const { error: updateError } = await supabase
+            .from('enrollments')
+            .update({ 
+              status: 'active',
+              enrolled_at: new Date().toISOString(),
+              enrolled_by: userProfile?.auth_user_id
+            })
+            .eq('student_id', userId)
+            .eq('course_id', course.id);
+          
+          if (updateError) throw updateError;
+        } else {
+          throw error;
+        }
+      }
       
       setEnrolledUsers([...enrolledUsers, userId]);
       toast({ title: 'Success', description: 'User enrolled successfully' });
@@ -117,11 +140,13 @@ export function EnhancedEnrollmentDialog({ course, triggerLabel = "Manage Enroll
   const unenrollUser = async (userId: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.rpc('admin_unenroll_student', {
-        _student_id: userId,
-        _course_id: course.id,
-        _reason: 'Unenrolled by admin'
-      });
+      
+      // Direct unenrollment
+      const { error } = await supabase
+        .from('enrollments')
+        .delete()
+        .eq('student_id', userId)
+        .eq('course_id', course.id);
       
       if (error) throw error;
       
