@@ -26,7 +26,7 @@ interface User {
   email: string | null;
   role: string | null;
   approved: boolean | null;
-  // We will read auth_user_id via "any" when needed
+  auth_user_id: string;
 }
 
 interface TutorAssignDialogProps {
@@ -43,14 +43,13 @@ export function TutorAssignDialog({ courseId, users, onChange }: TutorAssignDial
   const [assignedTutorAuthIds, setAssignedTutorAuthIds] = useState<string[]>([]);
 
   const tutorUsers = useMemo(() =>
-    users.filter((u) => u.role === 'tutor'),
+    users.filter((u) => u.role === 'tutor' || u.role === 'ultimate_tutor'),
   [users]);
 
   const tutorsByAuthId = useMemo(() => {
     const map = new Map<string, User>();
     tutorUsers.forEach((t) => {
-      const authId = (t as any).auth_user_id as string | undefined;
-      if (authId) map.set(authId, t);
+      if (t.auth_user_id) map.set(t.auth_user_id, t);
     });
     return map;
   }, [tutorUsers]);
@@ -128,15 +127,11 @@ export function TutorAssignDialog({ courseId, users, onChange }: TutorAssignDial
                   <SelectValue placeholder="Choose tutor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tutorUsers.map((tutor) => {
-                    const authId = (tutor as any).auth_user_id as string | undefined;
-                    if (!authId) return null;
-                    return (
-                      <SelectItem key={authId} value={authId}>
-                        {tutor.name || tutor.email}
-                      </SelectItem>
-                    );
-                  })}
+                  {tutorUsers.map((tutor) => (
+                    <SelectItem key={tutor.auth_user_id} value={tutor.auth_user_id}>
+                      {tutor.name || tutor.email}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button onClick={handleAssign} disabled={!selectedTutorAuthId || loading}>

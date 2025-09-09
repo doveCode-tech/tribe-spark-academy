@@ -12,13 +12,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { EnhancedEnrollmentDialog } from "@/components/EnhancedEnrollmentDialog";
+import { TutorAssignDialog } from "@/components/TutorAssignDialog";
 
 export default function Courses() {
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
   const [allCourses, setAllCourses] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
+const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<any[]>([]);
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -30,8 +32,24 @@ export default function Courses() {
     if (user) {
       fetchEnrolledCourses();
       fetchAllCourses();
+      if (isAdmin || isUltimateTutor) {
+        fetchUsers();
+      }
     }
-  }, [user]);
+  }, [user, isAdmin, isUltimateTutor]);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+    }
+  };
 
   const fetchEnrolledCourses = async () => {
     try {
@@ -204,10 +222,17 @@ export default function Courses() {
                       isEnrolled={isEnrolled}
                       customEnrollButton={
                         (isAdmin || isUltimateTutor) ? (
-                          <EnhancedEnrollmentDialog 
-                            course={course} 
-                            triggerLabel="Manage Enrollments"
-                          />
+                          <div className="flex gap-2">
+                            <EnhancedEnrollmentDialog 
+                              course={course} 
+                              triggerLabel="Manage Enrollments"
+                            />
+                            <TutorAssignDialog
+                              courseId={course.id}
+                              users={users}
+                              onChange={fetchUsers}
+                            />
+                          </div>
                         ) : undefined
                       }
                       onEnroll={async () => {
