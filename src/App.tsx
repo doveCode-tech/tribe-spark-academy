@@ -20,6 +20,8 @@ import Analytics from "./pages/Analytics";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import CreateTutor from "./pages/CreateTutor";
+import Reports from "./pages/Reports";
+import Badges from "./pages/Badges";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +89,16 @@ const App = () => (
             <Route path="/create-tutor" element={
               <ProtectedRoute>
                 <CreateTutor />
+              </ProtectedRoute>
+            } />
+            <Route path="/reports" element={
+              <ProtectedRoute>
+                <Reports />
+              </ProtectedRoute>
+            } />
+            <Route path="/badges" element={
+              <ProtectedRoute>
+                <Badges />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

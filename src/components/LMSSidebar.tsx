@@ -10,7 +10,9 @@ import {
   Home,
   PlusCircle,
   UserPlus,
-  BookOpenCheck
+  BookOpenCheck,
+  FileText,
+  Award
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -35,17 +37,17 @@ const studentItems = [
   { title: "My Courses", url: "/courses", icon: BookOpen },
   { title: "Portfolio", url: "/portfolio", icon: User },
   { title: "Achievements", url: "/achievements", icon: Trophy },
+  { title: "Badges", url: "/badges", icon: Award },
   { title: "Profile", url: "/profile", icon: Settings },
   { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
 
 const tutorItems = [
   { title: "Dashboard", url: "/", icon: Home },
-  { title: "My Students", url: "/students", icon: Users },
   { title: "Courses", url: "/courses", icon: BookOpen },
-  { title: "Grading", url: "/grading", icon: BookOpenCheck },
+  { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Badges", url: "/badges", icon: Award },
   { title: "Profile", url: "/profile", icon: Settings },
-  { title: "Create Student", url: "/create-student", icon: UserPlus },
   { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
 
@@ -54,6 +56,8 @@ const adminItems = [
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Manage Users", url: "/users", icon: Users },
   { title: "Course Management", url: "/courses", icon: BookOpen },
+  { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Badges", url: "/badges", icon: Award },
   { title: "Create Tutor", url: "/create-tutor", icon: PlusCircle },
   { title: "Profile", url: "/profile", icon: User },
   { title: "Settings", url: "/settings", icon: Settings },
