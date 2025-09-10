@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, BookOpen, Clock, Play, CheckCircle, Lock } from 'lucide-react';
+import { ArrowLeft, BookOpen, Clock, Play, CheckCircle, Lock, Trophy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +13,7 @@ import { CourseProgressTracker } from '@/components/CourseProgressTracker';
 import { InCourseGames } from '@/components/InCourseGames';
 import { QuizInterface } from '@/components/QuizInterface';
 import { ProjectSubmission } from '@/components/ProjectSubmission';
+import { QuizSection } from '@/components/QuizSection';
 
 interface Lesson {
   id: string;
@@ -38,7 +39,7 @@ export default function CourseDetail() {
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState(0);
+  const [lessonsProgress, setLessonsProgress] = useState(0);
 
   useEffect(() => {
     if (courseId && user) {
@@ -112,7 +113,7 @@ export default function CourseDetail() {
       const progressPercentage = lessonsWithProgress.length > 0 
         ? Math.round((completedCount / lessonsWithProgress.length) * 100) 
         : 0;
-      setProgress(progressPercentage);
+      setLessonsProgress(progressPercentage);
 
     } catch (error: any) {
       console.error('Error fetching course data:', error);
@@ -212,10 +213,10 @@ export default function CourseDetail() {
             </div>
             <div className="mt-4">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Course Progress</span>
-                <span className="text-sm text-muted-foreground">{progress}% Complete</span>
+                <span className="text-sm font-medium">Lesson Progress</span>
+                <span className="text-sm text-muted-foreground">{lessonsProgress}% Complete</span>
               </div>
-              <Progress value={progress} className="w-full" />
+              <Progress value={lessonsProgress} className="w-full" />
             </div>
           </CardHeader>
         </Card>
@@ -305,22 +306,9 @@ export default function CourseDetail() {
           </CardContent>
         </Card>
 
-        {/* Quiz Section - Coming Soon */}
-        {progress === 100 && (
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CheckCircle className="w-5 h-5 mr-2 text-success" />
-                Final Quiz
-              </CardTitle>
-              <CardDescription>
-                Complete the course quiz to earn your certificate (70% required to pass)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Quiz interface will be available soon!</p>
-            </CardContent>
-          </Card>
+        {/* Quiz Section */}
+        {lessonsProgress >= 90 && (
+          <QuizSection courseId={course.id} />
         )}
 
         {/* Project Submission */}
