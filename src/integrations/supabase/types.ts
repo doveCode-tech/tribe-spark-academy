@@ -283,7 +283,7 @@ export type Database = {
             columns: ["enrolled_by"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
+            referencedColumns: ["auth_user_id"]
           },
           {
             foreignKeyName: "enrollments_student_id_fkey"
@@ -543,10 +543,15 @@ export type Database = {
         Row: {
           course_id: string | null
           description: string | null
+          feedback: string | null
           file_path: string | null
+          grade: number | null
+          graded_at: string | null
+          graded_by: string | null
           id: string
           link: string | null
           portfolio_id: string | null
+          review_status: string | null
           screenshot: string | null
           student_id: string | null
           submitted_at: string | null
@@ -555,10 +560,15 @@ export type Database = {
         Insert: {
           course_id?: string | null
           description?: string | null
+          feedback?: string | null
           file_path?: string | null
+          grade?: number | null
+          graded_at?: string | null
+          graded_by?: string | null
           id?: string
           link?: string | null
           portfolio_id?: string | null
+          review_status?: string | null
           screenshot?: string | null
           student_id?: string | null
           submitted_at?: string | null
@@ -567,10 +577,15 @@ export type Database = {
         Update: {
           course_id?: string | null
           description?: string | null
+          feedback?: string | null
           file_path?: string | null
+          grade?: number | null
+          graded_at?: string | null
+          graded_by?: string | null
           id?: string
           link?: string | null
           portfolio_id?: string | null
+          review_status?: string | null
           screenshot?: string | null
           student_id?: string | null
           submitted_at?: string | null

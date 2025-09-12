@@ -23,6 +23,7 @@ import CreateTutor from "./pages/CreateTutor";
 import Reports from "./pages/Reports";
 import Badges from "./pages/Badges";
 import Lessons from "./pages/Lessons";
+import TutorCourseDetail from "./pages/TutorCourseDetail";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +106,11 @@ const App = () => (
             <Route path="/lessons/:courseId" element={
               <ProtectedRoute>
                 <Lessons />
+              </ProtectedRoute>
+            } />
+            <Route path="/tutor/course/:courseId" element={
+              <ProtectedRoute>
+                <TutorCourseDetail />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

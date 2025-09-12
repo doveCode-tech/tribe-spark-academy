@@ -68,23 +68,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!profile) {
               const meta = session.user.user_metadata || {};
               const fullName = meta.name || `${meta.first_name || ''} ${meta.last_name || ''}`.trim();
-              const insertRes = await supabase
-                .from('users')
-                .insert({
-                  auth_user_id: session.user.id,
-                  role: 'student',
-                  name: fullName || session.user.email,
-                  email: session.user.email,
-                  first_name: meta.first_name || '',
-                  last_name: meta.last_name || '',
-                  phone: meta.phone || '',
-                  city: meta.city || '',
-                  country: meta.country || '',
-                  approved: false, // Requires admin approval
-                })
-                .select('*')
-                .maybeSingle();
-              if (!insertRes.error) profile = insertRes.data;
+              
+              try {
+                const insertRes = await supabase
+                  .from('users')
+                  .insert({
+                    auth_user_id: session.user.id,
+                    role: 'student',
+                    name: fullName || session.user.email,
+                    email: session.user.email,
+                    first_name: meta.first_name || '',
+                    last_name: meta.last_name || '',
+                    phone: meta.phone || '',
+                    city: meta.city || '',
+                    country: meta.country || '',
+                    approved: false, // Requires admin approval
+                  })
+                  .select('*')
+                  .maybeSingle();
+                
+                if (!insertRes.error) {
+                  profile = insertRes.data;
+                } else {
+                  console.error('Error creating user profile:', insertRes.error);
+                }
+              } catch (profileError) {
+                console.error('Error creating user profile:', profileError);
+              }
             }
 
             // Note: Users now require manual admin approval

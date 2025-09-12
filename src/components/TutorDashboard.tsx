@@ -6,6 +6,7 @@ import { BookOpen, Users, FileText, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface Course {
   id: string;
@@ -32,6 +33,7 @@ interface Submission {
 export function TutorDashboard() {
   const { userProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,7 +165,11 @@ export function TutorDashboard() {
                       {course.category}
                     </Badge>
                   </div>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate(`/tutor/course/${course.id}`)}
+                  >
                     View Details
                   </Button>
                 </div>
