@@ -156,8 +156,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, additionalData?: { phone?: string; city?: string; country?: string }) => {
     try {
-      // Use the current preview URL for proper email redirects
-      const redirectUrl = window.location.origin;
+      // Use proper redirect URL - check if in localhost
+      const redirectUrl = window.location.origin.includes('localhost') 
+        ? 'https://twblstwtdemcufoknmgy.supabase.co/' 
+        : `${window.location.origin}/`;
       
       // Split full name into first and last name
       const nameParts = fullName.trim().split(' ');

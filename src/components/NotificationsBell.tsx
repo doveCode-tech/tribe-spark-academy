@@ -94,6 +94,20 @@ export function NotificationsBell() {
 
   const approve = async (n: NotificationRow) => {
     try {
+      if (n.type === 'user_signup') {
+        // Handle user signup approval
+        const userId = n.data?.user_id as string;
+        const { error } = await supabase.rpc('admin_approve_user', { _auth_user_id: userId });
+        if (error) throw error;
+        
+        // Mark notification as read
+        await supabase.from('notifications').update({ read: true }).eq('id', n.id);
+        toast({ title: 'User Approved', description: 'User has been approved successfully.' });
+        load();
+        return;
+      }
+      
+      // Handle enrollment request approval
       const requestId = n.data?.request_id as string;
       
       // Check if already resolved
@@ -131,6 +145,15 @@ export function NotificationsBell() {
 
   const reject = async (n: NotificationRow) => {
     try {
+      if (n.type === 'user_signup') {
+        // Handle user signup rejection - just mark as read
+        await supabase.from('notifications').update({ read: true }).eq('id', n.id);
+        toast({ title: 'Noted', description: 'User signup notification marked as read.' });
+        load();
+        return;
+      }
+      
+      // Handle enrollment request rejection
       const requestId = n.data?.request_id as string;
       
       // Check if already resolved
@@ -216,7 +239,17 @@ export function NotificationsBell() {
                 </Button>
               </div>
             )}
-            {!n.read && (
+            {isAdmin && n.type === 'user_signup' && !n.read && (
+              <div className="flex gap-2 mt-2">
+                <Button size="sm" variant="default" onClick={() => approve(n)}>
+                  <Check className="w-4 h-4 mr-1" /> Approve User
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => reject(n)}>
+                  Mark Read
+                </Button>
+              </div>
+            )}
+            {!n.read && n.type !== 'user_signup' && n.type !== 'enrollment_request' && (
               <div className="flex gap-2 mt-2">
                 <Button size="sm" variant="ghost" onClick={() => markRead(n.id)}>
                   Mark Read
