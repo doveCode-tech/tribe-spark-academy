@@ -80,21 +80,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   phone: meta.phone || '',
                   city: meta.city || '',
                   country: meta.country || '',
-                  approved: Boolean(session.user.email_confirmed_at) || false,
+                  approved: false, // Requires admin approval
                 })
                 .select('*')
                 .maybeSingle();
               if (!insertRes.error) profile = insertRes.data;
             }
 
-            // Auto-approve on confirmed email
-            if (profile && !profile.approved && session.user.email_confirmed_at) {
-              await supabase
-                .from('users')
-                .update({ approved: true })
-                .eq('auth_user_id', session.user.id);
-              profile = await fetchUserProfile(session.user.id);
-            }
+            // Note: Users now require manual admin approval
 
             setUserProfile(profile);
             setLoading(false);
