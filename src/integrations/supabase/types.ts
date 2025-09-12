@@ -199,15 +199,7 @@ export type Database = {
           id?: string
           title?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "courses_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       enrollment_requests: {
         Row: {

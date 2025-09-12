@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Plus, Video, FileText, Code, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CourseFormData {
   title: string;
@@ -30,6 +31,7 @@ interface CourseCreatorProps {
 
 export function CourseCreator({ onCourseCreated }: CourseCreatorProps) {
   const { toast } = useToast();
+  const { userProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [courseData, setCourseData] = useState<CourseFormData>({
@@ -48,7 +50,12 @@ export function CourseCreator({ onCourseCreated }: CourseCreatorProps) {
     try {
       const { data: course, error } = await supabase
         .from('courses')
-        .insert([{ title: courseData.title, description: courseData.description, category: courseData.category }])
+        .insert([{ 
+          title: courseData.title, 
+          description: courseData.description, 
+          category: courseData.category,
+          created_by: userProfile?.auth_user_id
+        }])
         .select()
         .single();
 
