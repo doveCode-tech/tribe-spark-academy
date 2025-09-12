@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, BookOpen, Users, FileText, Star, CheckCircle } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, FileText, Star, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Course {
   id: string;
@@ -27,7 +27,7 @@ interface Lesson {
   order_index: number;
 }
 
-interface StudentSubmission {
+interface Project {
   id: string;
   title: string;
   description: string;
@@ -48,19 +48,18 @@ export default function TutorCourseDetail() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
   const { toast } = useToast();
+  
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [gradingSubmissionId, setGradingSubmissionId] = useState<string | null>(null);
-  const [grade, setGrade] = useState('');
-  const [feedback, setFeedback] = useState('');
+  const [gradingProject, setGradingProject] = useState<string | null>(null);
 
   useEffect(() => {
-    if (courseId && userProfile) {
+    if (courseId) {
       fetchCourseData();
     }
-  }, [courseId, userProfile]);
+  }, [courseId]);
 
   const fetchCourseData = async () => {
     try {
@@ -71,10 +70,7 @@ export default function TutorCourseDetail() {
         .eq('id', courseId)
         .single();
 
-      if (courseError || !courseData) {
-        throw courseError;
-      }
-
+      if (courseError) throw courseError;
       setCourse(courseData);
 
       // Fetch lessons
@@ -84,14 +80,11 @@ export default function TutorCourseDetail() {
         .eq('course_id', courseId)
         .order('order_index');
 
-      if (lessonsError) {
-        throw lessonsError;
-      }
-
+      if (lessonsError) throw lessonsError;
       setLessons(lessonsData || []);
 
-      // Fetch student submissions for this course
-      const { data: submissionsData, error: submissionsError } = await supabase
+      // Fetch student projects with student info
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select(`
           id,
@@ -108,11 +101,8 @@ export default function TutorCourseDetail() {
         .eq('course_id', courseId)
         .order('submitted_at', { ascending: false });
 
-      if (submissionsError) {
-        throw submissionsError;
-      }
-
-      setSubmissions(submissionsData as any || []);
+      if (projectsError) throw projectsError;
+      setProjects(projectsData || []);
 
     } catch (error: any) {
       console.error('Error fetching course data:', error);
@@ -126,42 +116,31 @@ export default function TutorCourseDetail() {
     }
   };
 
-  const gradeSubmission = async (submissionId: string) => {
-    if (!grade || !feedback) {
-      toast({
-        title: "Error",
-        description: "Please provide both grade and feedback.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const gradeProject = async (projectId: string, grade: number, feedback: string, reviewStatus: string) => {
     try {
       const { error } = await supabase
         .from('projects')
         .update({
-          grade: parseInt(grade),
+          grade,
           feedback,
-          review_status: 'graded'
+          review_status: reviewStatus,
         })
-        .eq('id', submissionId);
+        .eq('id', projectId);
 
       if (error) throw error;
 
       toast({
-        title: "Success",
-        description: "Project graded successfully!",
+        title: "Project Graded",
+        description: "Grade and feedback have been saved successfully.",
       });
 
-      setGradingSubmissionId(null);
-      setGrade('');
-      setFeedback('');
+      setGradingProject(null);
       fetchCourseData(); // Refresh data
     } catch (error: any) {
-      console.error('Error grading submission:', error);
+      console.error('Error grading project:', error);
       toast({
         title: "Error",
-        description: "Failed to grade submission.",
+        description: "Failed to save grade.",
         variant: "destructive",
       });
     }
@@ -240,25 +219,25 @@ export default function TutorCourseDetail() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{submissions.length}</div>
+              <div className="text-2xl font-bold">{projects.length}</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Graded Projects</CardTitle>
+              <CardTitle className="text-sm font-medium">Pending Reviews</CardTitle>
               <Star className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {submissions.filter(s => s.review_status === 'graded').length}
+                {projects.filter(p => p.review_status === 'submitted').length}
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Lessons */}
-        <Card className="shadow-card">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
               <BookOpen className="w-5 h-5 mr-2" />
@@ -268,188 +247,223 @@ export default function TutorCourseDetail() {
               {lessons.length} lessons in this course
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {lessons.map((lesson, index) => (
-              <div key={lesson.id} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-muted">
-                      <span className="text-sm font-medium">{index + 1}</span>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">{lesson.title}</h4>
-                      <p className="text-sm text-muted-foreground">{lesson.description}</p>
-                      <div className="flex items-center text-xs text-muted-foreground mt-1">
-                        <span>{lesson.duration_minutes} minutes</span>
+          <CardContent>
+            {lessons.length === 0 ? (
+              <div className="text-center py-8">
+                <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">No lessons yet</h3>
+                <p className="text-muted-foreground">
+                  Lessons will appear here once they are created
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {lessons.map((lesson, index) => (
+                  <div key={lesson.id} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-medium">{index + 1}</span>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold">{lesson.title}</h4>
+                          <p className="text-sm text-muted-foreground">{lesson.description}</p>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Duration: {lesson.duration_minutes} minutes
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
-            
-            {lessons.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No lessons available in this course yet.</p>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Student Submissions */}
-        <Card className="shadow-card">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
-              <FileText className="w-5 h-5 mr-2" />
-              Student Submissions
+              <Users className="w-5 h-5 mr-2" />
+              Student Project Submissions
             </CardTitle>
             <CardDescription>
-              Review and grade student projects
+              Review and grade student work
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {submissions.map((submission) => (
-              <div key={submission.id} className="border rounded-lg p-4">
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-medium">{submission.title}</h4>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {submission.description}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Student: {submission.student?.name}</span>
-                        <span>
-                          Submitted: {new Date(submission.submitted_at).toLocaleDateString()}
-                        </span>
-                        <Badge variant={
-                          submission.review_status === 'graded' ? 'default' : 
-                          submission.review_status === 'reviewed' ? 'secondary' : 'outline'
-                        }>
-                          {submission.review_status}
-                        </Badge>
-                      </div>
-                      {submission.link && (
-                        <a 
-                          href={submission.link} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline text-sm mt-2 inline-block"
-                        >
-                          View Project
-                        </a>
-                      )}
-                      
-                      {/* Display grade and feedback if already graded */}
-                      {submission.grade !== null && (
-                        <div className="mt-2 p-3 bg-muted rounded">
-                          <div className="flex items-center gap-2 mb-1">
-                            <CheckCircle className="w-4 h-4 text-success" />
-                            <span className="font-medium">Grade: {submission.grade}/100</span>
+          <CardContent>
+            {projects.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">No submissions yet</h3>
+                <p className="text-muted-foreground">
+                  Student submissions will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {projects.map((project) => (
+                  <div key={project.id} className="p-6 border rounded-lg">
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-lg">{project.title}</h4>
+                          <p className="text-muted-foreground mt-1">{project.description}</p>
+                          
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
+                            <span>Student: {project.student?.name}</span>
+                            <span>
+                              Submitted: {new Date(project.submitted_at).toLocaleDateString()}
+                            </span>
                           </div>
-                          {submission.feedback && (
-                            <p className="text-sm text-muted-foreground">
-                              Feedback: {submission.feedback}
-                            </p>
+                          
+                          {project.link && (
+                            <a 
+                              href={project.link} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-primary hover:underline text-sm mt-2"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-1" />
+                              View Project
+                            </a>
                           )}
-                          {submission.graded_at && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Graded on: {new Date(submission.graded_at).toLocaleDateString()}
-                            </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            project.review_status === 'graded' ? 'default' : 
+                            project.review_status === 'reviewed' ? 'secondary' : 'outline'
+                          }>
+                            {project.review_status}
+                          </Badge>
+                          {project.grade !== null && (
+                            <Badge variant="default">
+                              Grade: {project.grade}/100
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Existing Grade/Feedback Display */}
+                      {project.grade !== null && (
+                        <div className="bg-muted p-4 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium">Grade: {project.grade}/100</span>
+                            {project.graded_at && (
+                              <span className="text-sm text-muted-foreground">
+                                Graded: {new Date(project.graded_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          {project.feedback && (
+                            <p className="text-sm text-muted-foreground">{project.feedback}</p>
                           )}
                         </div>
                       )}
-                    </div>
-                    
-                    <div className="flex flex-col gap-2">
-                      {submission.review_status !== 'graded' && (
-                        <Button 
-                          size="sm" 
-                          onClick={() => setGradingSubmissionId(submission.id)}
-                        >
-                          Grade Project
-                        </Button>
-                      )}
-                      {submission.review_status === 'graded' && (
-                        <Button 
-                          variant="outline"
-                          size="sm" 
-                          onClick={() => setGradingSubmissionId(submission.id)}
-                        >
-                          Re-grade
-                        </Button>
+
+                      {/* Grading Form */}
+                      {gradingProject === project.id ? (
+                        <GradingForm 
+                          project={project}
+                          onSubmit={gradeProject}
+                          onCancel={() => setGradingProject(null)}
+                        />
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setGradingProject(project.id)}
+                          >
+                            {project.grade !== null ? 'Update Grade' : 'Grade Project'}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>
-                  
-                  {/* Grading Form */}
-                  {gradingSubmissionId === submission.id && (
-                    <div className="border-t pt-4 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Grade (0-100)</label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={grade}
-                            onChange={(e) => setGrade(e.target.value)}
-                            placeholder="Enter grade..."
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Review Status</label>
-                          <Select defaultValue="graded">
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="reviewed">Reviewed</SelectItem>
-                              <SelectItem value="graded">Graded</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Feedback</label>
-                        <Textarea
-                          value={feedback}
-                          onChange={(e) => setFeedback(e.target.value)}
-                          placeholder="Provide detailed feedback for the student..."
-                          rows={3}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button onClick={() => gradeSubmission(submission.id)}>
-                          Submit Grade
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => {
-                            setGradingSubmissionId(null);
-                            setGrade('');
-                            setFeedback('');
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            
-            {submissions.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No student submissions yet.</p>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
     </LMSLayout>
+  );
+}
+
+// Grading Form Component
+function GradingForm({ 
+  project, 
+  onSubmit, 
+  onCancel 
+}: { 
+  project: Project;
+  onSubmit: (projectId: string, grade: number, feedback: string, reviewStatus: string) => void;
+  onCancel: () => void;
+}) {
+  const [grade, setGrade] = useState(project.grade?.toString() || '');
+  const [feedback, setFeedback] = useState(project.feedback || '');
+  const [reviewStatus, setReviewStatus] = useState(project.review_status || 'reviewed');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!grade || isNaN(Number(grade))) {
+      return;
+    }
+    onSubmit(project.id, Number(grade), feedback, reviewStatus);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 bg-muted p-4 rounded-lg">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium mb-2 block">Grade (0-100)</label>
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            value={grade}
+            onChange={(e) => setGrade(e.target.value)}
+            placeholder="Enter grade..."
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="text-sm font-medium mb-2 block">Status</label>
+          <Select value={reviewStatus} onValueChange={setReviewStatus}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="reviewed">Reviewed</SelectItem>
+              <SelectItem value="graded">Graded</SelectItem>
+              <SelectItem value="needs_revision">Needs Revision</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      
+      <div>
+        <label className="text-sm font-medium mb-2 block">Feedback</label>
+        <Textarea
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Provide feedback to the student..."
+          rows={4}
+        />
+      </div>
+      
+      <div className="flex gap-2">
+        <Button type="submit" size="sm">
+          Save Grade
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
