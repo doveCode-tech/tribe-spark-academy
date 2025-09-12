@@ -196,6 +196,11 @@ export function NotificationsBell() {
               <div>
                 <div className="font-medium">{n.title}</div>
                 <div className="text-sm text-muted-foreground">{n.message}</div>
+                {n.type === 'user_signup' && n.data && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    User: {n.data.user_name} ({n.data.user_email})
+                  </div>
+                )}
               </div>
               {!n.read && (
                 <Badge variant="outline">new</Badge>
@@ -208,6 +213,13 @@ export function NotificationsBell() {
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => reject(n)}>
                   <X className="w-4 h-4 mr-1" /> Reject
+                </Button>
+              </div>
+            )}
+            {!n.read && (
+              <div className="flex gap-2 mt-2">
+                <Button size="sm" variant="ghost" onClick={() => markRead(n.id)}>
+                  Mark Read
                 </Button>
               </div>
             )}

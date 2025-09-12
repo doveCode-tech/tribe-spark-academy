@@ -85,6 +85,29 @@ export function AdminDashboard() {
     }
   };
 
+  const approveUser = async (authUserId: string) => {
+    try {
+      const { error } = await supabase.rpc('admin_approve_user', {
+        _auth_user_id: authUserId
+      });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "User approved successfully",
+        description: "The user can now access the system.",
+      });
+      
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Error approving user",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const deleteUser = async (userId: string) => {
     try {
       const { error } = await supabase
@@ -426,6 +449,15 @@ export function AdminDashboard() {
                       </UltimateTutorAndAbove>
                       
                       <AdminOnly>
+                        {!user.approved && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => approveUser(user.auth_user_id)}
+                          >
+                            Approve
+                          </Button>
+                        )}
                         <Button 
                           variant="outline" 
                           size="sm"
