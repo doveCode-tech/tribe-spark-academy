@@ -290,7 +290,7 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
+            referencedColumns: ["auth_user_id"]
           },
         ]
       }
@@ -828,7 +828,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
-          approved: boolean
+          approved?: boolean
           auth_user_id?: string | null
           avatar_url?: string | null
           bio?: string | null
@@ -937,6 +937,10 @@ export type Database = {
       }
       cleanup_resolved_notifications: {
         Args: { _request_id: string }
+        Returns: undefined
+      }
+      ensure_user_profile_exists: {
+        Args: { _auth_user_id: string }
         Returns: undefined
       }
       generate_certificate: {

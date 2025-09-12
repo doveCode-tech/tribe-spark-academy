@@ -56,7 +56,7 @@ export function EnrollmentDialog({ courses, users, onEnrollmentComplete }: Enrol
 
       if (error) throw error;
 
-      const student = users.find(u => u.id === selectedStudent);
+      const student = users.find(u => (u as any).auth_user_id === selectedStudent);
       const course = courses.find(c => c.id === selectedCourse);
 
       toast({
@@ -106,8 +106,8 @@ export function EnrollmentDialog({ courses, users, onEnrollmentComplete }: Enrol
                 <SelectValue placeholder="Choose a student..." />
               </SelectTrigger>
               <SelectContent>
-                {students.map((student) => (
-                  <SelectItem key={student.id} value={student.id}>
+                 {students.map((student) => (
+                  <SelectItem key={student.id} value={(student as any).auth_user_id}>
                     {student.name} ({student.email})
                   </SelectItem>
                 ))}
