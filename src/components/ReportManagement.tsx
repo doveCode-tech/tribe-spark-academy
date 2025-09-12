@@ -89,35 +89,58 @@ export function ReportManagement() {
 
   const loadReports = async () => {
     try {
-      let query = supabase
-        .from('reports')
-        .select(`
-          *,
-          student:users!reports_student_id_fkey(first_name, last_name, name, email),
-          tutor:users!reports_tutor_id_fkey(first_name, last_name, name, email),
-          courses(title)
-        `);
+      let query = supabase.from('reports').select('*');
 
       if (isTutor && !isUltimateTutor && !isAdmin) {
         // Basic tutor can only see their own reports
         query = query.eq('tutor_id', userProfile?.auth_user_id);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data: reportsData, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const formattedReports = data?.map((report: any) => ({
-        ...report,
-        status: report.status as 'draft' | 'submitted' | 'approved' | 'rejected',
-        student_name: report.student?.first_name 
-          ? `${report.student.first_name} ${report.student.last_name}`.trim()
-          : report.student?.name || report.student?.email || 'Unknown',
-        tutor_name: report.tutor?.first_name
-          ? `${report.tutor.first_name} ${report.tutor.last_name}`.trim()
-          : report.tutor?.name || report.tutor?.email || 'Unknown',
-        course_title: report.courses?.title
-      })) || [];
+      const repList = reportsData || [];
+
+      const studentIds = Array.from(new Set(repList.map((r: any) => r.student_id).filter(Boolean)));
+      const tutorIds = Array.from(new Set(repList.map((r: any) => r.tutor_id).filter(Boolean)));
+      const userIds = Array.from(new Set([...studentIds, ...tutorIds]));
+      const courseIds = Array.from(new Set(repList.map((r: any) => r.course_id).filter(Boolean)));
+
+      const [usersRes, coursesRes] = await Promise.all([
+        userIds.length
+          ? supabase
+              .from('users')
+              .select('auth_user_id, first_name, last_name, name, email')
+              .in('auth_user_id', userIds)
+          : Promise.resolve({ data: [], error: null }),
+        courseIds.length
+          ? supabase.from('courses').select('id, title').in('id', courseIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (usersRes.error) throw usersRes.error;
+      if (coursesRes.error) throw coursesRes.error;
+
+      const usersMap = new Map((usersRes.data || []).map((u: any) => [u.auth_user_id, u]));
+      const coursesMap = new Map((coursesRes.data || []).map((c: any) => [c.id, c]));
+
+      const formattedReports = repList.map((report: any) => {
+        const student = usersMap.get(report.student_id);
+        const tutor = usersMap.get(report.tutor_id);
+        const course = report.course_id ? coursesMap.get(report.course_id) : null;
+        return {
+          ...report,
+          status: report.status as 'draft' | 'submitted' | 'approved' | 'rejected',
+          student_name: student?.first_name
+            ? `${student.first_name} ${student.last_name}`.trim()
+            : student?.name || student?.email || 'Unknown',
+          tutor_name: tutor?.first_name
+            ? `${tutor.first_name} ${tutor.last_name}`.trim()
+            : tutor?.name || tutor?.email || 'Unknown',
+          course_title: course?.title,
+        };
+      });
 
       setReports(formattedReports);
     } catch (error) {

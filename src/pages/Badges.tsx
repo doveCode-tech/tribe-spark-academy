@@ -7,6 +7,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+
 interface Badge {
   id: string;
   name: string;
@@ -21,6 +28,10 @@ export default function Badges() {
   const [studentBadges, setStudentBadges] = useState<Badge[]>([]);
   const [loading, setLoading] = useState(true);
   const { userProfile } = useAuth();
+  const { toast } = useToast();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newBadge, setNewBadge] = useState({ name: '', description: '', icon: 'Award', color: '#FFD700' });
+  const iconOptions = ['Award','Trophy','Star','Gamepad2','BookOpen','Users','FileText','GraduationCap'];
 
   useEffect(() => {
     loadBadges();
@@ -79,6 +90,29 @@ export default function Badges() {
     }
   };
 
+  const handleCreateBadge = async () => {
+    try {
+      if (!newBadge.name) {
+        toast({ title: 'Name required', description: 'Please enter a badge name.', variant: 'destructive' });
+        return;
+      }
+      const { error } = await supabase.from('badges').insert({
+        name: newBadge.name,
+        description: newBadge.description || null,
+        icon: newBadge.icon,
+        color: newBadge.color || '#FFD700',
+      });
+      if (error) throw error;
+      toast({ title: 'Badge created', description: 'New badge has been added.' });
+      setCreateOpen(false);
+      setNewBadge({ name: '', description: '', icon: 'Award', color: '#FFD700' });
+      await loadBadges();
+    } catch (e: any) {
+      console.error('Error creating badge:', e);
+      toast({ title: 'Error', description: e.message || 'Failed to create badge', variant: 'destructive' });
+    }
+  };
+
   if (loading) {
     return (
       <LMSLayout>
@@ -99,10 +133,53 @@ export default function Badges() {
           </div>
           
           {(userProfile?.role === 'admin' || userProfile?.role === 'tutor') && (
-            <Button variant="outline">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Badge
-            </Button>
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Badge
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[520px]">
+                <DialogHeader>
+                  <DialogTitle>Create Badge</DialogTitle>
+                  <DialogDescription>Define the badge details below.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="badge-name">Name</Label>
+                    <Input id="badge-name" value={newBadge.name} onChange={(e)=>setNewBadge({ ...newBadge, name: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="badge-desc">Description</Label>
+                    <Textarea id="badge-desc" rows={3} value={newBadge.description} onChange={(e)=>setNewBadge({ ...newBadge, description: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Icon</Label>
+                      <Select value={newBadge.icon} onValueChange={(v)=>setNewBadge({ ...newBadge, icon: v })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select icon" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {iconOptions.map((opt)=> (
+                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="badge-color">Color</Label>
+                      <Input id="badge-color" type="color" value={newBadge.color} onChange={(e)=>setNewBadge({ ...newBadge, color: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={()=>setCreateOpen(false)}>Cancel</Button>
+                    <Button onClick={handleCreateBadge} disabled={!newBadge.name}>Create</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
         

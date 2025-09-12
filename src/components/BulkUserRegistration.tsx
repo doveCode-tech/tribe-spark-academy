@@ -61,6 +61,9 @@ export function BulkUserRegistration({ onComplete }: BulkUserRegistrationProps) 
             case 'role':
               user.role = values[index] || 'student';
               break;
+            case 'password':
+              user.password = values[index];
+              break;
             default:
               break;
           }
@@ -69,6 +72,9 @@ export function BulkUserRegistration({ onComplete }: BulkUserRegistrationProps) 
         // Validation
         if (!user.email || !user.email.includes('@')) {
           throw new Error(`Invalid email: ${user.email}`);
+        }
+        if (!user.password) {
+          throw new Error(`Missing password for: ${user.email}`);
         }
         
         return user;
@@ -111,9 +117,9 @@ export function BulkUserRegistration({ onComplete }: BulkUserRegistrationProps) 
   };
 
   const downloadTemplate = () => {
-    const template = `email,first_name,last_name,username,role
-john.doe@example.com,John,Doe,johndoe,student
-jane.smith@example.com,Jane,Smith,janesmith,tutor`;
+    const template = `email,first_name,last_name,username,role,password
+john.doe@example.com,John,Doe,johndoe,student,Password123!
+jane.smith@example.com,Jane,Smith,janesmith,tutor,SecurePass!2`;
     
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -147,9 +153,9 @@ jane.smith@example.com,Jane,Smith,janesmith,tutor`;
         <div className="space-y-4">
           <Alert>
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Upload user data in CSV format. Required columns: email. Optional: first_name, last_name, username, role (defaults to 'student').
-            </AlertDescription>
+              <AlertDescription>
+                Upload user data in CSV format. Required columns: email, password. Optional: first_name, last_name, username, role (defaults to 'student').
+              </AlertDescription>
           </Alert>
 
           <div className="flex gap-2">
@@ -162,9 +168,9 @@ jane.smith@example.com,Jane,Smith,janesmith,tutor`;
           <div className="space-y-2">
             <label className="text-sm font-medium">CSV Data</label>
             <Textarea
-              placeholder="email,first_name,last_name,username,role
-john.doe@example.com,John,Doe,johndoe,student
-jane.smith@example.com,Jane,Smith,janesmith,tutor"
+              placeholder="email,first_name,last_name,username,role,password
+john.doe@example.com,John,Doe,johndoe,student,Password123!
+jane.smith@example.com,Jane,Smith,janesmith,tutor,SecurePass!2"
               value={csvData}
               onChange={(e) => setCsvData(e.target.value)}
               rows={8}
