@@ -41,28 +41,31 @@ export function BulkUserRegistration({ onComplete }: BulkUserRegistrationProps) 
         const user: any = {};
         
         headers.forEach((header, index) => {
+          const value = values[index];
+          if (!value) return; // Skip empty values
+          
           switch (header) {
             case 'email':
-              user.email = values[index];
+              user.email = value;
               break;
             case 'name':
             case 'full_name':
-              user.name = values[index];
+              user.name = value;
               break;
             case 'first_name':
-              user.first_name = values[index];
+              user.first_name = value;
               break;
             case 'last_name':
-              user.last_name = values[index];
+              user.last_name = value;
               break;
             case 'username':
-              user.username = values[index];
+              user.username = value;
               break;
             case 'role':
-              user.role = values[index] || 'student';
+              user.role = value || 'student';
               break;
             case 'password':
-              user.password = values[index];
+              user.password = value;
               break;
             default:
               break;
@@ -71,10 +74,10 @@ export function BulkUserRegistration({ onComplete }: BulkUserRegistrationProps) 
         
         // Validation
         if (!user.email || !user.email.includes('@')) {
-          throw new Error(`Invalid email: ${user.email}`);
+          throw new Error(`Invalid email: ${user.email || 'undefined'}`);
         }
         if (!user.password) {
-          throw new Error(`Missing password for: ${user.email}`);
+          throw new Error(`Missing password for: ${user.email || 'undefined'}`);
         }
         
         return user;

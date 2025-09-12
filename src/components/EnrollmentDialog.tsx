@@ -80,7 +80,7 @@ export function EnrollmentDialog({ courses, users, onEnrollmentComplete }: Enrol
     }
   };
 
-  const students = users.filter(user => user.role === 'student' && user.approved);
+  const students = users.filter(user => user.role === 'student');
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

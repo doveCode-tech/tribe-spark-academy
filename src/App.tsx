@@ -22,6 +22,7 @@ import Settings from "./pages/Settings";
 import CreateTutor from "./pages/CreateTutor";
 import Reports from "./pages/Reports";
 import Badges from "./pages/Badges";
+import Lessons from "./pages/Lessons";
 
 const queryClient = new QueryClient();
 
@@ -99,6 +100,11 @@ const App = () => (
             <Route path="/badges" element={
               <ProtectedRoute>
                 <Badges />
+              </ProtectedRoute>
+            } />
+            <Route path="/lessons/:courseId" element={
+              <ProtectedRoute>
+                <Lessons />
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -167,6 +167,31 @@ export function AdminDashboard() {
     }
   };
 
+  const deleteCourse = async (courseId: string) => {
+    try {
+      const { error } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', courseId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Course deleted successfully",
+      });
+
+      fetchData();
+    } catch (error: any) {
+      console.error('Error deleting course:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete course",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -283,7 +308,20 @@ export function AdminDashboard() {
                   <div className="flex gap-2">
                     <TutorAssignDialog courseId={course.id} users={users} onChange={fetchData} />
                     <CodeTemplateEditor courseId={course.id} category={course.category} />
-                    <Button variant="outline" size="sm">Lessons</Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => window.open(`/lessons/${course.id}`, '_blank')}
+                    >
+                      Lessons
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => deleteCourse(course.id)}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </div>
               ))}

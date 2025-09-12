@@ -55,7 +55,7 @@ export default function CourseDetail() {
         .select('*')
         .eq('course_id', courseId)
         .eq('student_id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (enrollmentError || !enrollment) {
         toast({
