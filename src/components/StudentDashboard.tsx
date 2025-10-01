@@ -35,7 +35,7 @@ export function StudentDashboard() {
           *,
           courses (*)
         `)
-        .eq('student_id', userProfile?.id);
+        .eq('student_id', userProfile?.auth_user_id);
 
       if (error) {
         console.error('Error fetching enrolled courses:', error);
@@ -51,16 +51,9 @@ export function StudentDashboard() {
 
   const fetchAvailableCourses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('courses')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching available courses:', error);
-      } else {
-        setAvailableCourses(data || []);
-      }
+      // Students should only see enrolled courses, not all available courses
+      // Remove this to prevent showing "Enroll Now" for students
+      setAvailableCourses([]);
     } catch (error) {
       console.error('Error fetching available courses:', error);
     }
@@ -88,7 +81,7 @@ export function StudentDashboard() {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .eq('student_id', userProfile?.id);
+        .eq('student_id', userProfile?.auth_user_id);
 
       if (error) {
         console.error('Error fetching portfolio projects:', error);
@@ -184,33 +177,6 @@ export function StudentDashboard() {
             </div>
           )}
 
-          {/* Available Courses Preview */}
-          {!loading && availableCourses.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold flex items-center">
-                <Sparkles className="w-5 h-5 mr-2 text-secondary" />
-                Explore New Courses
-              </h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                {availableCourses.slice(0, 4).map((course) => {
-                  const isEnrolled = enrolledCourses.some(e => e.course_id === course.id);
-                  if (isEnrolled) return null;
-                  
-                  return (
-                    <CourseCard
-                      key={course.id}
-                      course={course}
-                      isEnrolled={false}
-                      onEnroll={() => {
-                        // This would trigger enrollment flow
-                        console.log('Enroll in course:', course.id);
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Sidebar - Achievements and AI Recommendations */}

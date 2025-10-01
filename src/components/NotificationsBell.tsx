@@ -75,6 +75,15 @@ export function NotificationsBell() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
         load();
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => {
+        load();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notifications' }, () => {
+        load();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'enrollment_requests' }, () => {
+        load();
+      })
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
