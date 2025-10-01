@@ -24,6 +24,7 @@ import Reports from "./pages/Reports";
 import Badges from "./pages/Badges";
 import Lessons from "./pages/Lessons";
 import TutorCourseDetail from "./pages/TutorCourseDetail";
+import PublicPortfolio from "./pages/PublicPortfolio";
 
 const queryClient = new QueryClient();
 
@@ -113,6 +114,7 @@ const App = () => (
                 <TutorCourseDetail />
               </ProtectedRoute>
             } />
+            <Route path="/portfolio/:studentId" element={<PublicPortfolio />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

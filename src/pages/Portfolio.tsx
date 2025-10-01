@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ExternalLink, Github, Eye, Calendar, Code, Cpu, Palette } from "lucide-react";
+import { SharePortfolioButton } from "@/components/SharePortfolioButton";
+import { useAuth } from "@/contexts/AuthContext";
 
 const projects = [
   {
@@ -63,6 +65,8 @@ const certificates = [
 ];
 
 const Portfolio = () => {
+  const { userProfile } = useAuth();
+  
   return (
     <LMSLayout>
       <div className="space-y-6">
@@ -71,12 +75,16 @@ const Portfolio = () => {
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
               <Avatar className="w-24 h-24">
-                <AvatarImage src="/placeholder.svg" alt="Student" />
-                <AvatarFallback className="text-2xl">AJ</AvatarFallback>
+                <AvatarImage src={userProfile?.avatar_url || "/placeholder.svg"} alt="Student" />
+                <AvatarFallback className="text-2xl">
+                  {userProfile?.name?.slice(0, 2).toUpperCase() || 'ST'}
+                </AvatarFallback>
               </Avatar>
               
               <div className="flex-1">
-                <h1 className="text-3xl font-bold mb-2">Alex Johnson</h1>
+                <h1 className="text-3xl font-bold mb-2">
+                  {userProfile?.name || 'Student Portfolio'}
+                </h1>
                 <p className="text-muted-foreground mb-4">
                   Passionate young coder exploring the exciting world of programming, robotics, and creative technology.
                   I love building interactive projects and solving challenging problems!
@@ -88,18 +96,24 @@ const Portfolio = () => {
                     Joined January 2024
                   </div>
                   <div>
-                    🏆 {certificates.length} Certificates Earned
+                    {certificates.length} Certificates Earned
                   </div>
                   <div>
-                    📚 {projects.length} Projects Completed
+                    {projects.length} Projects Completed
                   </div>
                 </div>
               </div>
               
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Share Portfolio
+                {userProfile?.auth_user_id && (
+                  <SharePortfolioButton studentId={userProfile.auth_user_id} />
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => window.location.href = '/badges'}
+                >
+                  View All Achievements
                 </Button>
               </div>
             </div>

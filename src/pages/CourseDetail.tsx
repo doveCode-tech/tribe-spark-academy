@@ -13,6 +13,7 @@ import { CourseProgressTracker } from '@/components/CourseProgressTracker';
 import { InCourseGames } from '@/components/InCourseGames';
 import { QuizInterface } from '@/components/QuizInterface';
 import { ProjectSubmission } from '@/components/ProjectSubmission';
+import { SequentialLessonLock, LessonCard } from '@/components/SequentialLessonLock';
 import { QuizSection } from '@/components/QuizSection';
 
 interface Lesson {
@@ -236,66 +237,30 @@ export default function CourseDetail() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {lessons.map((lesson, index) => (
-              <div key={lesson.id}>
-                <div
-                  className={`border rounded-lg p-4 transition-all ${
-                    lesson.completed 
-                      ? 'bg-success/5 border-success/20' 
-                      : 'hover:shadow-md'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        lesson.completed 
-                          ? 'bg-success text-success-foreground' 
-                          : 'bg-muted'
-                      }`}>
-                        {lesson.completed ? (
-                          <CheckCircle className="w-4 h-4" />
-                        ) : (
-                          <span className="text-sm font-medium">{index + 1}</span>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold">{lesson.title}</h4>
-                        <p className="text-sm text-muted-foreground">{lesson.description}</p>
-                        <div className="flex items-center text-xs text-muted-foreground mt-1">
-                          <Clock className="w-3 h-3 mr-1" />
-                          {lesson.duration_minutes} minutes
-                        </div>
-                      </div>
+            {lessons.map((lesson, index) => {
+              // Sequential unlock: first lesson always unlocked, others unlock after previous is completed
+              const isFirstLesson = index === 0;
+              const previousLessonCompleted = index > 0 ? lessons[index - 1].completed : true;
+              const isUnlocked = isFirstLesson || previousLessonCompleted;
+              
+              return (
+                <div key={lesson.id}>
+                  <LessonCard
+                    lesson={lesson}
+                    isUnlocked={isUnlocked}
+                    isCompleted={lesson.completed || false}
+                    onStart={() => isUnlocked && startLesson(lesson.id)}
+                  />
+                  
+                  {/* Mini-games after lessons 3 and 7 */}
+                  {(index + 1 === 3 || index + 1 === 7) && lesson.completed && (
+                    <div className="mt-4">
+                      <InCourseGames courseId={course.id} lessonNumber={index + 1} />
                     </div>
-                    
-                    <Button
-                      size="sm"
-                      variant={lesson.completed ? "outline" : "default"}
-                      onClick={() => startLesson(lesson.id)}
-                    >
-                      {lesson.completed ? (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Completed
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-4 h-4 mr-2" />
-                          Start Lesson
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  )}
                 </div>
-                
-                {/* Mini-games after lessons 3 and 7 */}
-                {(index + 1 === 3 || index + 1 === 7) && lesson.completed && (
-                  <div className="mt-4">
-                    <InCourseGames courseId={course.id} lessonNumber={index + 1} />
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
             
             {lessons.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">

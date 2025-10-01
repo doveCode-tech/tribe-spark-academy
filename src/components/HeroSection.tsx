@@ -20,13 +20,13 @@ export function HeroSection({ onStartLearning }: HeroSectionProps) {
                 Learn to Code,
                 <br />
                 <span className="bg-gradient-rainbow bg-clip-text text-transparent">
-                  Create Magic! ✨
+                  Create Amazing Projects
                 </span>
               </h1>
               
               <p className="text-xl text-white/90 leading-relaxed">
-                Join thousands of young coders on an amazing journey! 
-                Build games, websites, robots, and bring your ideas to life.
+                Join thousands of young learners on an exciting educational journey. 
+                Build games, websites, robots, and bring your creative ideas to life.
               </p>
             </div>
 
@@ -46,7 +46,7 @@ export function HeroSection({ onStartLearning }: HeroSectionProps) {
                 className="border-white/30 text-white hover:bg-white/10 font-semibold text-lg px-8 py-4 rounded-xl"
               >
                 <Zap className="w-5 h-5 mr-2" />
-                Start Interactive Content
+                Interactive Lessons
               </Button>
             </div>
 
@@ -62,8 +62,8 @@ export function HeroSection({ onStartLearning }: HeroSectionProps) {
               <div className="flex items-center space-x-2">
                 <Trophy className="w-6 h-6 text-yellow" />
                 <div className="text-sm">
-                  <div className="font-semibold">Fun Projects</div>
-                  <div className="text-white/70">Build real things</div>
+                  <div className="font-semibold">Real Projects</div>
+                  <div className="text-white/70">Build portfolio</div>
                 </div>
               </div>
             </div>
@@ -71,27 +71,27 @@ export function HeroSection({ onStartLearning }: HeroSectionProps) {
 
           <div className="hidden md:block">
             <div className="relative">
-              {/* Floating code elements */}
+              {/* Floating code elements with professional icons */}
               <div className="absolute -top-4 -right-4 bg-white/20 backdrop-blur-sm rounded-xl p-4 rotate-12 animate-bounce">
-                <div className="text-2xl">🐍</div>
-                <div className="text-xs font-mono">print("Hello!")</div>
+                <BookOpen className="w-8 h-8" />
+                <div className="text-xs font-mono mt-2">Python</div>
               </div>
               
               <div className="absolute top-16 -left-8 bg-white/20 backdrop-blur-sm rounded-xl p-4 -rotate-12 animate-bounce" style={{ animationDelay: '0.5s' }}>
-                <div className="text-2xl">🤖</div>
-                <div className="text-xs font-mono">AI Magic</div>
+                <Zap className="w-8 h-8" />
+                <div className="text-xs font-mono mt-2">AI & ML</div>
               </div>
               
               <div className="absolute bottom-8 right-8 bg-white/20 backdrop-blur-sm rounded-xl p-4 rotate-6 animate-bounce" style={{ animationDelay: '1s' }}>
-                <div className="text-2xl">🎮</div>
-                <div className="text-xs font-mono">Game Dev</div>
+                <Trophy className="w-8 h-8" />
+                <div className="text-xs font-mono mt-2">Games</div>
               </div>
               
               {/* Main illustration placeholder */}
               <div className="w-full h-64 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center">
                 <div className="text-center space-y-4">
-                  <div className="text-6xl">👩‍💻</div>
-                  <div className="text-lg font-semibold">Ready to Code?</div>
+                  <BookOpen className="w-16 h-16 mx-auto" />
+                  <div className="text-lg font-semibold">Start Your Journey</div>
                 </div>
               </div>
             </div>
