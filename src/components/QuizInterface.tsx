@@ -10,10 +10,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 interface Question {
-  id: string;
+  id: string | number;
   question: string;
   options: string[];
-  correctAnswer: number;
+  correctAnswer?: number;
+  correct?: number; // Support both field names
   explanation?: string;
 }
 
@@ -71,7 +72,8 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
   const calculateScore = () => {
     let correct = 0;
     quiz.questions.forEach((question, index) => {
-      if (answers[index] === question.correctAnswer) {
+      const correctAnswer = question.correctAnswer ?? question.correct ?? 0;
+      if (answers[index] === correctAnswer) {
         correct++;
       }
     });
@@ -94,11 +96,15 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
           student_id: userProfile?.auth_user_id,
           quiz_id: quiz.id,
           course_id: quiz.course_id,
-          answers: Object.entries(answers).map(([questionIndex, answerIndex]) => ({
-            questionIndex: parseInt(questionIndex),
-            answerIndex,
-            correct: quiz.questions[parseInt(questionIndex)].correctAnswer === answerIndex
-          })),
+          answers: Object.entries(answers).map(([questionIndex, answerIndex]) => {
+            const question = quiz.questions[parseInt(questionIndex)];
+            const correctAnswer = question.correctAnswer ?? question.correct ?? 0;
+            return {
+              questionIndex: parseInt(questionIndex),
+              answerIndex,
+              correct: correctAnswer === answerIndex
+            };
+          }),
           score: finalScore,
           passed: isPassed,
           attempt_number: attempts + 1,
@@ -178,7 +184,8 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
           <div className="space-y-3">
             {quiz.questions.map((question, qIndex) => {
               const userAnswer = answers[qIndex];
-              const isCorrect = userAnswer === question.correctAnswer;
+              const correctAnswer = question.correctAnswer ?? question.correct ?? 0;
+              const isCorrect = userAnswer === correctAnswer;
               
               return (
                 <div key={qIndex} className="p-3 border rounded-lg text-left">
@@ -195,7 +202,7 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
                       </p>
                       {!isCorrect && (
                         <p className="text-sm text-success">
-                          Correct answer: {question.options[question.correctAnswer]}
+                          Correct answer: {question.options[correctAnswer]}
                         </p>
                       )}
                     </div>

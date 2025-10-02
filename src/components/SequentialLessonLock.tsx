@@ -1,6 +1,9 @@
-import { Lock, CheckCircle2 } from "lucide-react";
+import { Lock, CheckCircle2, Play, BookOpen, Clock, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 interface SequentialLessonLockProps {
   isUnlocked: boolean;
@@ -49,33 +52,66 @@ export function LessonCard({
   isCompleted: boolean; 
   onStart: () => void;
 }) {
+  const navigate = useNavigate();
+  
+  const handleViewLesson = () => {
+    navigate(`/lessons/${lesson.id}`);
+  };
+
   return (
-    <div 
-      className={cn(
-        "p-4 border rounded-lg transition-all",
-        isUnlocked ? "cursor-pointer hover:shadow-md hover:border-primary" : "opacity-60 cursor-not-allowed",
-        isCompleted && "bg-success/5 border-success/20"
-      )}
-      onClick={isUnlocked ? onStart : undefined}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="font-semibold">{lesson.title}</h3>
-            <SequentialLessonLock 
-              isUnlocked={isUnlocked} 
-              isCompleted={isCompleted} 
-              lessonNumber={lesson.order_index} 
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">{lesson.description}</p>
-          {!isUnlocked && !isCompleted && (
-            <p className="text-xs text-warning mt-2">
-              Complete previous lesson to unlock
+    <Card className={!isUnlocked ? 'opacity-60' : ''}>
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-2">
+              <h3 className="text-lg font-semibold truncate">{lesson.title}</h3>
+              <SequentialLessonLock 
+                isUnlocked={isUnlocked}
+                isCompleted={isCompleted}
+                lessonNumber={lesson.order_index}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+              {lesson.description}
             </p>
-          )}
+            {lesson.duration_minutes && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="w-4 h-4" />
+                <span>{lesson.duration_minutes} minutes</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {isUnlocked && !isCompleted && (
+              <Button
+                onClick={handleViewLesson}
+                size="sm"
+                variant="outline"
+              >
+                <BookOpen className="w-4 h-4 mr-2" />
+                View Content
+              </Button>
+            )}
+            <Button
+              onClick={onStart}
+              disabled={!isUnlocked || isCompleted}
+              size="sm"
+            >
+              {isCompleted ? (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Completed
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  {isUnlocked ? 'Mark Complete' : 'Locked'}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
