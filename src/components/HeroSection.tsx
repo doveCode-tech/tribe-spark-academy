@@ -44,6 +44,7 @@ export function HeroSection({ onStartLearning }: HeroSectionProps) {
                 variant="outline" 
                 size="lg"
                 className="border-white/30 text-white hover:bg-white/10 font-semibold text-lg px-8 py-4 rounded-xl"
+                onClick={onStartLearning}
               >
                 <Zap className="w-5 h-5 mr-2" />
                 Interactive Lessons

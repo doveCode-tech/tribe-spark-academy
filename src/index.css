@@ -68,10 +68,15 @@
 
     --radius: 0.75rem;
 
+    /* Professional Dark Purple Theme */
+    --dark-purple: 270 60% 20%;
+    --dark-purple-light: 270 50% 30%;
+    --dark-purple-dark: 270 70% 15%;
+    
     /* Fun Gradients for Kids */
     --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--cyan)));
     --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--pink)));
-    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)), hsl(var(--pink)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--dark-purple-dark)), hsl(var(--dark-purple)), hsl(270 50% 40%));
     --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(var(--success-light)));
     --gradient-rainbow: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)), hsl(var(--pink)), hsl(var(--warning)), hsl(var(--success)));
     --gradient-course-python: linear-gradient(135deg, hsl(60 100% 75%), hsl(120 100% 75%));

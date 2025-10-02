@@ -1,71 +1,84 @@
+import { useEffect, useState } from "react";
 import { LMSLayout } from "@/components/LMSLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ExternalLink, Github, Eye, Calendar, Code, Cpu, Palette } from "lucide-react";
+import { ExternalLink, Github, Code, Calendar, FileText, Trophy } from "lucide-react";
 import { SharePortfolioButton } from "@/components/SharePortfolioButton";
+import { ProjectCodeViewer } from "@/components/ProjectCodeViewer";
+import { CertificateViewer } from "@/components/CertificateViewer";
 import { useAuth } from "@/contexts/AuthContext";
-
-const projects = [
-  {
-    id: 1,
-    title: "Python Snake Game",
-    description: "A classic Snake game built with Python and Pygame. Features include score tracking, speed increases, and collision detection.",
-    course: "Python Fundamentals",
-    courseIcon: Code,
-    submittedDate: "2024-01-20",
-    technologies: ["Python", "Pygame"],
-    githubUrl: "https://github.com/student/snake-game",
-    liveUrl: "https://replit.com/@student/snake-game",
-    screenshot: "/placeholder.svg",
-    grade: "A+",
-    feedback: "Excellent implementation with clean code structure!"
-  },
-  {
-    id: 2,
-    title: "Scratch Animation Story",
-    description: "An interactive storytelling animation featuring a cat exploring different worlds with sound effects and user interactions.",
-    course: "Scratch Programming",
-    courseIcon: Palette,
-    submittedDate: "2024-01-25",
-    technologies: ["Scratch"],
-    liveUrl: "https://scratch.mit.edu/projects/12345/",
-    screenshot: "/placeholder.svg",
-    grade: "A",
-    feedback: "Creative storytelling with smooth animations!"
-  },
-  {
-    id: 3,
-    title: "LED Arduino Controller",
-    description: "Arduino project that controls RGB LEDs using sensor inputs. Features multiple lighting patterns and sound reactive modes.",
-    course: "Arduino Robotics",
-    courseIcon: Cpu,
-    submittedDate: "2024-01-28",
-    technologies: ["Arduino", "C++", "Electronics"],
-    githubUrl: "https://github.com/student/led-controller",
-    screenshot: "/placeholder.svg",
-    grade: "A+",
-    feedback: "Impressive understanding of electronics and programming!"
-  }
-];
-
-const skills = [
-  { name: "Python", level: 85 },
-  { name: "Scratch", level: 95 },
-  { name: "Arduino", level: 70 },
-  { name: "HTML/CSS", level: 60 },
-  { name: "Problem Solving", level: 90 },
-  { name: "Creative Thinking", level: 88 }
-];
-
-const certificates = [
-  { name: "Python Fundamentals", issueDate: "2024-01-20", verificationId: "PF-2024-001" },
-  { name: "Scratch Programming", issueDate: "2024-01-25", verificationId: "SP-2024-002" }
-];
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Portfolio = () => {
   const { userProfile } = useAuth();
+  const { toast } = useToast();
+  const [projects, setProjects] = useState<any[]>([]);
+  const [badges, setBadges] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<any>(null);
+  const [selectedCertificate, setSelectedCertificate] = useState<string | null>(null);
+  const [showCodeViewer, setShowCodeViewer] = useState(false);
+  const [showCertViewer, setShowCertViewer] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (userProfile?.auth_user_id) {
+      fetchPortfolioData();
+    }
+  }, [userProfile]);
+
+  const fetchPortfolioData = async () => {
+    try {
+      // Fetch graded projects only
+      const { data: projectsData } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('student_id', userProfile?.auth_user_id)
+        .eq('review_status', 'graded')
+        .order('submitted_at', { ascending: false });
+
+      setProjects(projectsData || []);
+
+      // Fetch badges
+      const { data: badgesData } = await supabase
+        .from('student_badges')
+        .select('earned_at, badges(*)')
+        .eq('student_id', userProfile?.auth_user_id);
+
+      setBadges(badgesData?.map(b => ({ ...b.badges, earned_at: b.earned_at })) || []);
+
+      // Fetch certificates
+      const { data: certificatesData } = await supabase
+        .from('certificates')
+        .select('*')
+        .eq('student_id', userProfile?.auth_user_id)
+        .order('issued_at', { ascending: false });
+
+      setCertificates(certificatesData || []);
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load portfolio data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <LMSLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading portfolio...</div>
+        </div>
+      </LMSLayout>
+    );
+  }
   
   return (
     <LMSLayout>
@@ -86,20 +99,22 @@ const Portfolio = () => {
                   {userProfile?.name || 'Student Portfolio'}
                 </h1>
                 <p className="text-muted-foreground mb-4">
-                  Passionate young coder exploring the exciting world of programming, robotics, and creative technology.
-                  I love building interactive projects and solving challenging problems!
+                  {userProfile?.bio || 'Passionate young coder exploring the exciting world of programming, robotics, and creative technology.'}
                 </p>
                 
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    Joined January 2024
+                    Joined {new Date(userProfile?.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                   </div>
                   <div>
                     {certificates.length} Certificates Earned
                   </div>
                   <div>
                     {projects.length} Projects Completed
+                  </div>
+                  <div>
+                    {badges.length} Badges Earned
                   </div>
                 </div>
               </div>
@@ -111,8 +126,9 @@ const Portfolio = () => {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => window.location.href = '/badges'}
+                  onClick={() => window.location.href = '/achievements'}
                 >
+                  <Trophy className="w-4 h-4 mr-2" />
                   View All Achievements
                 </Button>
               </div>
@@ -128,116 +144,174 @@ const Portfolio = () => {
                 <CardTitle>My Projects</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {projects.map((project) => {
-                  const CourseIcon = project.courseIcon;
-                  
-                  return (
+                {projects.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    Complete and get your projects graded to see them here
+                  </p>
+                ) : (
+                  projects.map((project) => (
                     <div key={project.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-start gap-4">
-                        <img 
-                          src={project.screenshot} 
-                          alt={project.title}
-                          className="w-20 h-20 rounded-lg object-cover bg-muted"
-                        />
+                        {project.screenshot && (
+                          <img 
+                            src={project.screenshot} 
+                            alt={project.title}
+                            className="w-20 h-20 rounded-lg object-cover bg-muted"
+                          />
+                        )}
                         
                         <div className="flex-1">
                           <div className="flex items-start justify-between mb-2">
                             <h3 className="font-semibold text-lg">{project.title}</h3>
-                            <Badge variant="outline" className="shrink-0">
-                              {project.grade}
-                            </Badge>
+                            {project.grade && (
+                              <Badge variant="default" className="shrink-0 bg-success">
+                                {project.grade}%
+                              </Badge>
+                            )}
                           </div>
                           
                           <p className="text-muted-foreground text-sm mb-3">
                             {project.description}
                           </p>
                           
-                          <div className="flex items-center gap-2 mb-3">
-                            <CourseIcon className="w-4 h-4" />
-                            <span className="text-sm font-medium">{project.course}</span>
-                            <span className="text-muted-foreground text-sm">
-                              • {new Date(project.submittedDate).toLocaleDateString()}
+                          <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
+                            <span>
+                              Submitted: {new Date(project.submitted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                             </span>
                           </div>
                           
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {project.technologies.map((tech, index) => (
-                              <Badge key={index} variant="secondary" className="text-xs">
-                                {tech}
-                              </Badge>
-                            ))}
-                          </div>
+                          {project.feedback && (
+                            <div className="text-sm text-muted-foreground mb-3 italic">
+                              Feedback: {project.feedback}
+                            </div>
+                          )}
                           
                           <div className="flex gap-2">
-                            {project.liveUrl && (
-                              <Button variant="outline" size="sm">
-                                <Eye className="w-4 h-4 mr-1" />
+                            {project.link && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => window.open(project.link, '_blank')}
+                              >
+                                <ExternalLink className="w-4 h-4 mr-1" />
                                 View Project
                               </Button>
                             )}
-                            {project.githubUrl && (
-                              <Button variant="outline" size="sm">
-                                <Github className="w-4 h-4 mr-1" />
-                                Code
-                              </Button>
-                            )}
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setSelectedProject(project);
+                                setShowCodeViewer(true);
+                              }}
+                            >
+                              <Code className="w-4 h-4 mr-1" />
+                              Code
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                toast({
+                                  title: "GitHub Integration",
+                                  description: "Push to GitHub feature coming soon!",
+                                });
+                              }}
+                            >
+                              <Github className="w-4 h-4 mr-1" />
+                              GitHub
+                            </Button>
                           </div>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Skills */}
-            <Card className="shadow-card">
-              <CardHeader>
-                <CardTitle>Skills</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {skills.map((skill, index) => (
-                  <div key={index}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-medium">{skill.name}</span>
-                      <span className="text-muted-foreground">{skill.level}%</span>
+            {/* Badges */}
+            {badges.length > 0 && (
+              <Card className="shadow-card">
+                <CardHeader>
+                  <CardTitle>Badges Earned</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {badges.map((badge, index) => (
+                    <div key={index} className="p-3 border rounded-lg flex items-center gap-3">
+                      <div className="text-2xl">{badge.icon || '🏆'}</div>
+                      <div>
+                        <h4 className="font-medium text-sm">{badge.name}</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Earned: {new Date(badge.earned_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
+                      </div>
                     </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className="bg-gradient-primary h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${skill.level}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Certificates */}
-            <Card className="shadow-card">
-              <CardHeader>
-                <CardTitle>Certificates</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {certificates.map((cert, index) => (
-                  <div key={index} className="p-3 border rounded-lg">
-                    <h4 className="font-medium text-sm">{cert.name}</h4>
-                    <p className="text-xs text-muted-foreground">
-                      Issued: {new Date(cert.issueDate).toLocaleDateString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      ID: {cert.verificationId}
-                    </p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            {certificates.length > 0 && (
+              <Card className="shadow-card">
+                <CardHeader>
+                  <CardTitle>Certificates</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {certificates.map((cert) => (
+                    <div key={cert.id} className="p-3 border rounded-lg">
+                      <h4 className="font-medium text-sm">{cert.course_title}</h4>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Issued: {new Date(cert.completion_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setSelectedCertificate(cert.id);
+                          setShowCertViewer(true);
+                        }}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        View Certificate
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Empty State */}
+            {badges.length === 0 && certificates.length === 0 && (
+              <Card className="shadow-card">
+                <CardContent className="p-6 text-center">
+                  <Trophy className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">
+                    Complete lessons and courses to earn badges and certificates!
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
+
+      <ProjectCodeViewer
+        project={selectedProject}
+        open={showCodeViewer}
+        onOpenChange={setShowCodeViewer}
+      />
+
+      <CertificateViewer
+        certificateId={selectedCertificate}
+        open={showCertViewer}
+        onOpenChange={setShowCertViewer}
+      />
     </LMSLayout>
   );
 };

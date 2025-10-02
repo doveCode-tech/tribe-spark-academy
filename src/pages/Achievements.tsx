@@ -1,17 +1,18 @@
+import { useEffect, useState } from "react";
 import { LMSLayout } from "@/components/LMSLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Trophy, Star, Target, Zap, Award, Clock } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
-const achievements = [
+const achievementTemplates = [
   {
     id: 1,
     name: "First Steps",
     description: "Complete your first lesson",
     icon: Star,
-    earned: true,
-    earnedDate: "2024-01-15",
     xp: 50,
     category: "Milestone"
   },
@@ -66,8 +67,33 @@ const achievements = [
 ];
 
 const Achievements = () => {
-  const earnedAchievements = achievements.filter(a => a.earned);
-  const totalXP = earnedAchievements.reduce((sum, a) => sum + a.xp, 0);
+  const { userProfile } = useAuth();
+  const [badges, setBadges] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (userProfile?.auth_user_id) {
+      fetchBadges();
+    }
+  }, [userProfile]);
+
+  const fetchBadges = async () => {
+    try {
+      const { data } = await supabase
+        .from('student_badges')
+        .select('earned_at, badges(*)')
+        .eq('student_id', userProfile?.auth_user_id);
+
+      setBadges(data?.map(b => ({ ...b.badges, earned_at: b.earned_at })) || []);
+    } catch (error) {
+      console.error('Error fetching badges:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const earnedAchievements = badges.filter(b => b.earned_at);
+  const totalXP = earnedAchievements.length * 100;
 
   return (
     <LMSLayout>
@@ -78,7 +104,7 @@ const Achievements = () => {
             <div>
               <h1 className="text-3xl font-bold mb-2">Your Achievements</h1>
               <p className="text-primary-foreground/80">
-                {earnedAchievements.length} of {achievements.length} achievements earned
+                {earnedAchievements.length} achievements earned
               </p>
             </div>
             <div className="text-center">
@@ -89,11 +115,11 @@ const Achievements = () => {
           
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-2">
-              <span>Progress</span>
-              <span>{Math.round((earnedAchievements.length / achievements.length) * 100)}%</span>
+              <span>Badges Earned</span>
+              <span>{earnedAchievements.length} total</span>
             </div>
             <Progress 
-              value={(earnedAchievements.length / achievements.length) * 100} 
+              value={earnedAchievements.length > 0 ? 100 : 0} 
               className="h-2"
             />
           </div>
@@ -101,36 +127,32 @@ const Achievements = () => {
 
         {/* Achievement Categories */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {achievements.map((achievement) => {
-            const IconComponent = achievement.icon;
+          {loading ? (
+            <p className="col-span-full text-center text-muted-foreground">Loading achievements...</p>
+          ) : earnedAchievements.length === 0 ? (
+            <p className="col-span-full text-center text-muted-foreground py-8">
+              Complete lessons and earn badges to see your achievements here!
+            </p>
+          ) : (
+            badges.map((achievement) => {
+            const IconComponent = Trophy;
             
             return (
               <Card 
                 key={achievement.id}
-                className={`shadow-card transition-all duration-200 hover:shadow-lg ${
-                  achievement.earned 
-                    ? 'ring-2 ring-success/20 bg-success/5' 
-                    : 'opacity-75 hover:opacity-100'
-                }`}
+                className="shadow-card transition-all duration-200 hover:shadow-lg ring-2 ring-success/20 bg-success/5"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      achievement.earned 
-                        ? 'bg-success text-success-foreground' 
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
-                      <IconComponent className="w-6 h-6" />
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center bg-success text-success-foreground text-2xl">
+                      {achievement.icon || '🏆'}
                     </div>
                     <div className="text-right">
-                      <Badge 
-                        variant={achievement.earned ? "default" : "secondary"}
-                        className="mb-1"
-                      >
-                        {achievement.category}
+                      <Badge variant="default" className="mb-1 bg-success">
+                        Earned
                       </Badge>
                       <div className="text-sm text-muted-foreground">
-                        +{achievement.xp} XP
+                        +100 XP
                       </div>
                     </div>
                   </div>
@@ -142,21 +164,16 @@ const Achievements = () => {
                     {achievement.description}
                   </p>
                   
-                  {achievement.earned && achievement.earnedDate && (
+                  {achievement.earned_at && (
                     <div className="text-xs text-success">
-                      Earned on {new Date(achievement.earnedDate).toLocaleDateString()}
-                    </div>
-                  )}
-                  
-                  {!achievement.earned && (
-                    <div className="text-xs text-muted-foreground">
-                      Not yet earned
+                      Earned on {new Date(achievement.earned_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                     </div>
                   )}
                 </CardContent>
               </Card>
             );
-          })}
+          })
+          )}
         </div>
       </div>
     </LMSLayout>
