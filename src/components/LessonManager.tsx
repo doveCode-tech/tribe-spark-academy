@@ -40,6 +40,25 @@ export function LessonManager({ courseId, category }: LessonManagerProps) {
 
   useEffect(() => {
     fetchLessons();
+
+    // Real-time updates for lesson changes
+    const lessonsChannel = supabase
+      .channel('lessons-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lessons',
+          filter: `course_id=eq.${courseId}`
+        },
+        () => fetchLessons()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(lessonsChannel);
+    };
   }, [courseId]);
 
   const fetchLessons = async () => {

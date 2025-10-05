@@ -25,6 +25,45 @@ export function StudentDashboard() {
       fetchAchievements();
       fetchPortfolioProjects();
     }
+
+    // Real-time updates for enrollments, badges, and projects
+    const changesChannel = supabase
+      .channel('student-dashboard-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+          filter: `student_id=eq.${userProfile?.auth_user_id}`
+        },
+        () => fetchEnrolledCourses()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'student_badges',
+          filter: `student_id=eq.${userProfile?.auth_user_id}`
+        },
+        () => fetchAchievements()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects',
+          filter: `student_id=eq.${userProfile?.auth_user_id}`
+        },
+        () => fetchPortfolioProjects()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(changesChannel);
+    };
   }, [userProfile]);
 
   const fetchEnrolledCourses = async () => {

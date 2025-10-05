@@ -38,6 +38,34 @@ export default function Badges() {
     if (userProfile?.role === 'student') {
       loadStudentBadges();
     }
+
+    // Real-time updates for badges and student badges
+    const badgesChannel = supabase
+      .channel('badges-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'badges'
+        },
+        () => loadBadges()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'student_badges',
+          filter: `student_id=eq.${userProfile?.auth_user_id}`
+        },
+        () => loadStudentBadges()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(badgesChannel);
+    };
   }, [userProfile]);
 
   const loadBadges = async () => {

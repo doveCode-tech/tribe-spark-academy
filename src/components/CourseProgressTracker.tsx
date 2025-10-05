@@ -23,6 +23,35 @@ export function CourseProgressTracker({ courseId, className = "" }: CourseProgre
     if (courseId && user) {
       fetchProgress();
     }
+
+    // Real-time updates for lesson progress and quiz attempts
+    const progressChannel = supabase
+      .channel('course-progress-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_progress',
+          filter: `student_id=eq.${user?.id}`
+        },
+        () => fetchProgress()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'quiz_attempts',
+          filter: `student_id=eq.${user?.id}`
+        },
+        () => fetchProgress()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(progressChannel);
+    };
   }, [courseId, user]);
 
   const fetchProgress = async () => {
