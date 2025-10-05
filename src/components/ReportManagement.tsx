@@ -272,6 +272,65 @@ export function ReportManagement() {
     }
   };
 
+  const sendReportToParent = async (report: Report) => {
+    try {
+      // Get student details including parent email
+      const { data: studentData, error: studentError } = await supabase
+        .from('users')
+        .select('email, first_name, last_name, name')
+        .eq('auth_user_id', report.student_id)
+        .single();
+
+      if (studentError) throw studentError;
+
+      if (!studentData?.email) {
+        throw new Error('Student email not found');
+      }
+
+      // Get tutor name
+      const { data: tutorData } = await supabase
+        .from('users')
+        .select('first_name, last_name, name')
+        .eq('auth_user_id', report.tutor_id)
+        .single();
+
+      const studentName = studentData.first_name
+        ? `${studentData.first_name} ${studentData.last_name || ''}`.trim()
+        : studentData.name || studentData.email;
+
+      const tutorName = tutorData?.first_name
+        ? `${tutorData.first_name} ${tutorData.last_name || ''}`.trim()
+        : tutorData?.name || 'Your Tutor';
+
+      // Send email via edge function
+      const { data, error } = await supabase.functions.invoke('send-report-email', {
+        body: {
+          reportId: report.id,
+          parentEmail: studentData.email,
+          studentName,
+          reportTitle: report.title,
+          reportContent: report.content,
+          tutorName,
+          courseName: report.course_title || undefined
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Report Sent",
+        description: `Report has been sent to ${studentData.email}`,
+      });
+    } catch (error: any) {
+      console.error('Error sending report to parent:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send report to parent.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-muted text-muted-foreground';
@@ -324,14 +383,14 @@ export function ReportManagement() {
                 <div>
                   <Label htmlFor="course">Course (Optional)</Label>
                   <Select
-                    value={newReport.course_id}
-                    onValueChange={(value) => setNewReport(prev => ({ ...prev, course_id: value }))}
+                    value={newReport.course_id || 'none'}
+                    onValueChange={(value) => setNewReport(prev => ({ ...prev, course_id: value === 'none' ? '' : value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select course" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No specific course</SelectItem>
+                      <SelectItem value="none">No specific course</SelectItem>
                       {courses.map((course) => (
                         <SelectItem key={course.id} value={course.id}>
                           {course.title}
@@ -480,7 +539,18 @@ export function ReportManagement() {
                         onClick={() => submitReport(report.id)}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Submit
+                        Send Report
+                      </Button>
+                    )}
+
+                    {report.status === 'approved' && canReview && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => sendReportToParent(report)}
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        Send to Parent
                       </Button>
                     )}
                   </div>
