@@ -421,9 +421,12 @@ export function AdminDashboard() {
                         >Approve</Button>
                       )}
                       
-                      <Select onValueChange={(newRole) => updateUserRole(user.id, newRole)}>
+                      <Select 
+                        value={user.role || 'student'} 
+                        onValueChange={(newRole) => updateUserRole(user.id, newRole)}
+                      >
                         <SelectTrigger className="w-40">
-                          <SelectValue placeholder={user.role === 'ultimate_tutor' ? 'Ultimate Tutor' : user.role} />
+                          <SelectValue placeholder="Select role" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="student">Student</SelectItem>
