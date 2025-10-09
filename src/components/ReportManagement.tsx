@@ -212,6 +212,42 @@ export function ReportManagement() {
     }
   };
 
+  const createAndSubmitReport = async () => {
+    try {
+      if (!newReport.title || !newReport.content || !newReport.student_id) {
+        toast({
+          title: "Validation Error",
+          description: "Please select a student and fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('reports')
+        .insert({
+          ...newReport,
+          tutor_id: userProfile?.auth_user_id,
+          status: 'draft'
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      await submitReport(data!.id);
+
+      setNewReport({ title: '', content: '', student_id: '', course_id: '' });
+    } catch (error: any) {
+      console.error('Error creating and submitting report:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send report to admin.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const submitReport = async (reportId: string) => {
     try {
       const { error } = await supabase
@@ -445,6 +481,13 @@ export function ReportManagement() {
                     disabled={!newReport.title || !newReport.content || !newReport.student_id}
                   >
                     Save Draft
+                  </Button>
+                  <Button
+                    onClick={createAndSubmitReport}
+                    disabled={!newReport.title || !newReport.content || !newReport.student_id}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send to Admin
                   </Button>
                 </div>
               </div>
