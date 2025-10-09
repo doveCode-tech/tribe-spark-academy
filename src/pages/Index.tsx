@@ -27,6 +27,9 @@ const Index = () => {
       case 'admin':
         console.log('Rendering AdminDashboard');
         return <AdminDashboard />;
+      case 'ultimate_tutor':
+        console.log('Rendering AdminDashboard for Ultimate Tutor');
+        return <AdminDashboard />;
       case 'tutor':
         console.log('Rendering TutorDashboard');
         return <TutorDashboard />;

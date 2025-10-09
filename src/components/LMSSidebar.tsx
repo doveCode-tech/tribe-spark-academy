@@ -30,7 +30,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 
 // Define user role type
-type UserRole = 'student' | 'tutor' | 'admin';
+type UserRole = 'student' | 'tutor' | 'ultimate_tutor' | 'admin';
 
 const studentItems = [
   { title: "Dashboard", url: "/", icon: Home },
@@ -51,6 +51,17 @@ const tutorItems = [
   { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
 
+const ultimateTutorItems = [
+  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "Manage Users", url: "/users", icon: Users },
+  { title: "Course Management", url: "/courses", icon: BookOpen },
+  { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Badges", url: "/badges", icon: Award },
+  { title: "Profile", url: "/profile", icon: User },
+  { title: "Settings", url: "/settings", icon: Settings },
+];
+
 const adminItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
@@ -67,6 +78,7 @@ const getMenuItems = (role: UserRole | undefined) => {
   switch (role) {
     case 'student': return studentItems;
     case 'tutor': return tutorItems;
+    case 'ultimate_tutor': return ultimateTutorItems;
     case 'admin': return adminItems;
     default: return studentItems;
   }
@@ -76,6 +88,7 @@ const getRoleDisplayName = (role: UserRole | undefined) => {
   switch (role) {
     case 'student': return 'Student Portal';
     case 'tutor': return 'Tutor Dashboard';
+    case 'ultimate_tutor': return 'Ultimate Tutor Panel';
     case 'admin': return 'Admin Panel';
     default: return 'STEMTribe LMS';
   }

@@ -533,7 +533,7 @@ export function ReportManagement() {
                       </DialogContent>
                     </Dialog>
 
-                    {report.status === 'draft' && report.tutor_id === userProfile?.auth_user_id && (
+                    {report.status === 'draft' && (report.tutor_id === userProfile?.auth_user_id || canReview) && (
                       <Button
                         size="sm"
                         onClick={() => submitReport(report.id)}
@@ -543,7 +543,7 @@ export function ReportManagement() {
                       </Button>
                     )}
 
-                    {report.status === 'approved' && canReview && (
+                    {report.status === 'approved' && (canReview || report.tutor_id === userProfile?.auth_user_id) && (
                       <Button
                         size="sm"
                         variant="default"
