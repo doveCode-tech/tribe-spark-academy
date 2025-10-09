@@ -224,9 +224,21 @@ export function ReportManagement() {
 
       if (error) throw error;
 
+      // Notify admin about new report submission
+      const report = reports.find(r => r.id === reportId);
+      if (report) {
+        await supabase.from('notifications').insert({
+          recipient_role: 'admin',
+          type: 'report_submitted',
+          title: 'New Report Submitted',
+          message: `A new report "${report.title}" has been submitted for review by ${report.tutor_name}`,
+          data: { report_id: reportId }
+        });
+      }
+
       toast({
-        title: "Report Submitted",
-        description: "Your report has been submitted for review.",
+        title: "Report Sent to Admin",
+        description: "Your report has been sent to admin for review.",
       });
 
       loadReports();
@@ -539,11 +551,11 @@ export function ReportManagement() {
                         onClick={() => submitReport(report.id)}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Send Report
+                        Send to Admin
                       </Button>
                     )}
 
-                    {report.status === 'approved' && (canReview || report.tutor_id === userProfile?.auth_user_id) && (
+                    {report.status === 'approved' && canReview && (
                       <Button
                         size="sm"
                         variant="default"
