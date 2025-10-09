@@ -157,13 +157,32 @@ export function ReportManagement() {
 
   const loadStudents = async () => {
     try {
-      const { data, error } = await supabase
+      // Get all students
+      const { data: allStudents, error: studentsError } = await supabase
         .from('users')
         .select('auth_user_id, first_name, last_name, name, email')
         .eq('role', 'student');
 
-      if (error) throw error;
-      setStudents(data || []);
+      if (studentsError) throw studentsError;
+
+      // Get students who already have approved reports
+      const { data: approvedReports, error: reportsError } = await supabase
+        .from('reports')
+        .select('student_id')
+        .eq('status', 'approved');
+
+      if (reportsError) throw reportsError;
+
+      // Filter out students with approved reports
+      const studentsWithApprovedReports = new Set(
+        (approvedReports || []).map(r => r.student_id)
+      );
+
+      const availableStudents = (allStudents || []).filter(
+        student => !studentsWithApprovedReports.has(student.auth_user_id)
+      );
+
+      setStudents(availableStudents);
     } catch (error) {
       console.error('Error loading students:', error);
     }
