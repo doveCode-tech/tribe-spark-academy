@@ -67,7 +67,7 @@ export function ReportManagement() {
     title: '',
     content: '',
     student_id: '',
-    course_id: ''
+    course_id: 'none'
   });
   const [reviewComments, setReviewComments] = useState('');
 
@@ -204,13 +204,16 @@ export function ReportManagement() {
 
   const createReport = async () => {
     try {
+      const reportData = {
+        ...newReport,
+        course_id: newReport.course_id === 'none' ? null : newReport.course_id,
+        tutor_id: userProfile?.auth_user_id,
+        status: 'draft'
+      };
+
       const { error } = await supabase
         .from('reports')
-        .insert({
-          ...newReport,
-          tutor_id: userProfile?.auth_user_id,
-          status: 'draft'
-        });
+        .insert(reportData);
 
       if (error) throw error;
 
@@ -219,7 +222,7 @@ export function ReportManagement() {
         description: "Your report has been saved as a draft.",
       });
 
-      setNewReport({ title: '', content: '', student_id: '', course_id: '' });
+      setNewReport({ title: '', content: '', student_id: '', course_id: 'none' });
       loadReports();
     } catch (error: any) {
       console.error('Error creating report:', error);
@@ -242,13 +245,16 @@ export function ReportManagement() {
         return;
       }
 
+      const reportData = {
+        ...newReport,
+        course_id: newReport.course_id === 'none' ? null : newReport.course_id,
+        tutor_id: userProfile?.auth_user_id,
+        status: 'draft'
+      };
+
       const { data, error } = await supabase
         .from('reports')
-        .insert({
-          ...newReport,
-          tutor_id: userProfile?.auth_user_id,
-          status: 'draft'
-        })
+        .insert(reportData)
         .select('id')
         .single();
 
@@ -256,7 +262,7 @@ export function ReportManagement() {
 
       await submitReport(data!.id);
 
-      setNewReport({ title: '', content: '', student_id: '', course_id: '' });
+      setNewReport({ title: '', content: '', student_id: '', course_id: 'none' });
     } catch (error: any) {
       console.error('Error creating and submitting report:', error);
       toast({
@@ -450,8 +456,8 @@ export function ReportManagement() {
                 <div>
                   <Label htmlFor="course">Course (Optional)</Label>
                   <Select
-                    value={newReport.course_id || 'none'}
-                    onValueChange={(value) => setNewReport(prev => ({ ...prev, course_id: value === 'none' ? '' : value }))}
+                    value={newReport.course_id}
+                    onValueChange={(value) => setNewReport(prev => ({ ...prev, course_id: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select course" />
@@ -491,7 +497,7 @@ export function ReportManagement() {
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => setNewReport({ title: '', content: '', student_id: '', course_id: '' })}
+                    onClick={() => setNewReport({ title: '', content: '', student_id: '', course_id: 'none' })}
                   >
                     Clear
                   </Button>
