@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, FileText } from "lucide-react";
+import { Search, FileText, Upload, X, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -59,8 +59,15 @@ export function StudentsList() {
   const [reportForm, setReportForm] = useState({
     title: '',
     content: '',
-    course_id: 'none'
+    course_id: 'none',
+    grade: '',
   });
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [uploadedAttachments, setUploadedAttachments] = useState<Array<{ name: string; path: string }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isTutor = userProfile?.role === 'tutor' || userProfile?.role === 'ultimate_tutor';
 
@@ -131,7 +138,54 @@ export function StudentsList() {
     }
   };
 
-  const createAndSubmitReport = async () => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setAttachments(prev => [...prev, ...newFiles]);
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadAttachments = async () => {
+    if (attachments.length === 0) return [];
+
+    setIsUploading(true);
+    const uploaded: Array<{ name: string; path: string }> = [];
+
+    try {
+      for (const file of attachments) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${userProfile?.auth_user_id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('report-attachments')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        uploaded.push({ name: file.name, path: filePath });
+      }
+
+      setUploadedAttachments(uploaded);
+      return uploaded;
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to upload some attachments.",
+        variant: "destructive",
+      });
+      return [];
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const saveReport = async (sendToAdmin: boolean = false) => {
     try {
       if (!reportForm.title || !reportForm.content || !selectedStudent) {
         toast({
@@ -142,13 +196,21 @@ export function StudentsList() {
         return;
       }
 
+      setIsSaving(true);
+
+      // Upload attachments if any
+      const uploadedFiles = await uploadAttachments();
+
       const reportData = {
         title: reportForm.title,
         content: reportForm.content,
         student_id: selectedStudent.auth_user_id,
         course_id: reportForm.course_id === 'none' ? null : reportForm.course_id,
         tutor_id: userProfile?.auth_user_id,
-        status: 'draft'
+        grade: reportForm.grade ? parseInt(reportForm.grade) : null,
+        attachments: uploadedFiles.length > 0 ? uploadedFiles : null,
+        status: sendToAdmin ? 'submitted' : 'draft',
+        submitted_at: sendToAdmin ? new Date().toISOString() : null
       };
 
       const { data, error } = await supabase
@@ -159,40 +221,39 @@ export function StudentsList() {
 
       if (error) throw error;
 
-      // Submit the report immediately
-      const { error: submitError } = await supabase
-        .from('reports')
-        .update({
-          status: 'submitted',
-          submitted_at: new Date().toISOString()
-        })
-        .eq('id', data.id);
-
-      if (submitError) throw submitError;
-
-      // Notify admin
-      await supabase.from('notifications').insert({
-        recipient_role: 'admin',
-        type: 'report_submitted',
-        title: 'New Report Submitted',
-        message: `A new report "${reportForm.title}" has been submitted for review`,
-        data: { report_id: data.id }
-      });
+      // Notify admin if sending for review
+      if (sendToAdmin) {
+        await supabase.from('notifications').insert({
+          recipient_role: 'admin',
+          type: 'report_submitted',
+          title: 'New Report Submitted',
+          message: `A new report "${reportForm.title}" has been submitted for review`,
+          data: { report_id: data.id }
+        });
+      }
 
       toast({
-        title: "Report Sent",
-        description: "Your report has been sent to admin for review.",
+        title: sendToAdmin ? "Report Sent" : "Draft Saved",
+        description: sendToAdmin 
+          ? "Your report has been sent to admin for review." 
+          : "Your report has been saved as a draft.",
       });
 
-      setReportForm({ title: '', content: '', course_id: 'none' });
+      // Reset form
+      setReportForm({ title: '', content: '', course_id: 'none', grade: '' });
+      setAttachments([]);
+      setUploadedAttachments([]);
       setSelectedStudent(null);
+      setDialogOpen(false);
     } catch (error: any) {
-      console.error('Error creating report:', error);
+      console.error('Error saving report:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to send report.",
+        description: error.message || "Failed to save report.",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -284,43 +345,61 @@ export function StudentsList() {
                 </div>
 
                 {isTutor && (
-                  <Dialog>
+                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                     <DialogTrigger asChild>
                       <Button
                         size="sm"
-                        onClick={() => setSelectedStudent(student)}
+                        onClick={() => {
+                          setSelectedStudent(student);
+                          setDialogOpen(true);
+                        }}
                       >
                         <FileText className="w-4 h-4 mr-2" />
                         Write Report
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Create Report for {getStudentDisplayName(student)}</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="course">Course (Optional)</Label>
-                          <Select
-                            value={reportForm.course_id}
-                            onValueChange={(value) => setReportForm(prev => ({ ...prev, course_id: value }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select course" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No specific course</SelectItem>
-                              {courses.map((course) => (
-                                <SelectItem key={course.id} value={course.id}>
-                                  {course.title}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="course">Course (Optional)</Label>
+                            <Select
+                              value={reportForm.course_id}
+                              onValueChange={(value) => setReportForm(prev => ({ ...prev, course_id: value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select course" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No specific course</SelectItem>
+                                {courses.map((course) => (
+                                  <SelectItem key={course.id} value={course.id}>
+                                    {course.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="grade">Grade (Optional)</Label>
+                            <Input
+                              id="grade"
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={reportForm.grade}
+                              onChange={(e) => setReportForm(prev => ({ ...prev, grade: e.target.value }))}
+                              placeholder="Enter grade (0-100)"
+                            />
+                          </div>
                         </div>
 
                         <div>
-                          <Label htmlFor="title">Report Title</Label>
+                          <Label htmlFor="title">Report Title *</Label>
                           <Input
                             id="title"
                             value={reportForm.title}
@@ -330,29 +409,92 @@ export function StudentsList() {
                         </div>
 
                         <div>
-                          <Label htmlFor="content">Report Content</Label>
+                          <Label htmlFor="content">Report Body *</Label>
                           <Textarea
                             id="content"
                             value={reportForm.content}
                             onChange={(e) => setReportForm(prev => ({ ...prev, content: e.target.value }))}
-                            placeholder="Write your report here..."
-                            rows={8}
+                            placeholder="Write your detailed report here... You can include progress updates, observations, recommendations, and any relevant feedback about the student's performance."
+                            rows={10}
+                            className="resize-none"
                           />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {reportForm.content.length} characters
+                          </p>
                         </div>
 
-                        <div className="flex justify-end gap-2">
+                        <div>
+                          <Label>Attachments (Optional)</Label>
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                multiple
+                                onChange={handleFileSelect}
+                                className="hidden"
+                                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isUploading}
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                Choose Files
+                              </Button>
+                              <span className="text-xs text-muted-foreground">
+                                PDF, DOC, TXT, or images
+                              </span>
+                            </div>
+
+                            {attachments.length > 0 && (
+                              <div className="space-y-1">
+                                {attachments.map((file, index) => (
+                                  <div key={index} className="flex items-center justify-between p-2 bg-muted rounded text-sm">
+                                    <span className="truncate">{file.name}</span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeAttachment(index)}
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-4 border-t">
                           <Button
                             variant="outline"
                             onClick={() => {
-                              setReportForm({ title: '', content: '', course_id: 'none' });
+                              setReportForm({ title: '', content: '', course_id: 'none', grade: '' });
+                              setAttachments([]);
+                              setUploadedAttachments([]);
                               setSelectedStudent(null);
+                              setDialogOpen(false);
                             }}
+                            disabled={isSaving || isUploading}
                           >
                             Cancel
                           </Button>
                           <Button
-                            onClick={createAndSubmitReport}
-                            disabled={!reportForm.title || !reportForm.content}
+                            variant="outline"
+                            onClick={() => saveReport(false)}
+                            disabled={!reportForm.title || !reportForm.content || isSaving || isUploading}
+                          >
+                            <Save className="w-4 h-4 mr-2" />
+                            Save Draft
+                          </Button>
+                          <Button
+                            onClick={() => saveReport(true)}
+                            disabled={!reportForm.title || !reportForm.content || isSaving || isUploading}
                           >
                             <FileText className="w-4 h-4 mr-2" />
                             Send to Admin

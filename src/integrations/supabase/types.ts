@@ -718,9 +718,11 @@ export type Database = {
       }
       reports: {
         Row: {
+          attachments: Json | null
           content: string
           course_id: string | null
           created_at: string
+          grade: number | null
           id: string
           reviewed_at: string | null
           reviewed_by: string | null
@@ -733,9 +735,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          attachments?: Json | null
           content: string
           course_id?: string | null
           created_at?: string
+          grade?: number | null
           id?: string
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -748,9 +752,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          attachments?: Json | null
           content?: string
           course_id?: string | null
           created_at?: string
+          grade?: number | null
           id?: string
           reviewed_at?: string | null
           reviewed_by?: string | null

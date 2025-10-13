@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Send, Check, X, Eye, Plus } from "lucide-react";
+import { FileText, Send, Check, X, Eye, Plus, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +40,8 @@ interface Report {
   student_name?: string;
   tutor_name?: string;
   course_title?: string;
+  grade?: number;
+  attachments?: Array<{ name: string; path: string }>;
 }
 
 interface Student {
@@ -549,6 +551,11 @@ export function ReportManagement() {
                         Course: {report.course_title}
                       </p>
                     )}
+                    {report.grade !== null && report.grade !== undefined && (
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Grade: {report.grade}%
+                      </p>
+                    )}
                     <p className="text-sm text-muted-foreground">
                       Created: {new Date(report.created_at).toLocaleDateString()}
                     </p>
@@ -573,11 +580,72 @@ export function ReportManagement() {
                           <DialogTitle>{report.title}</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="font-medium">Student:</span> {report.student_name}
+                            </div>
+                            <div>
+                              <span className="font-medium">Tutor:</span> {report.tutor_name}
+                            </div>
+                            {report.course_title && (
+                              <div>
+                                <span className="font-medium">Course:</span> {report.course_title}
+                              </div>
+                            )}
+                            {report.grade !== null && report.grade !== undefined && (
+                              <div>
+                                <span className="font-medium">Grade:</span> {report.grade}%
+                              </div>
+                            )}
+                          </div>
+
                           <div className="bg-muted p-4 rounded">
                             <pre className="whitespace-pre-wrap font-sans text-sm">
                               {report.content}
                             </pre>
                           </div>
+
+                          {report.attachments && report.attachments.length > 0 && (
+                            <div>
+                              <Label className="mb-2 block">Attachments</Label>
+                              <div className="space-y-2">
+                                {report.attachments.map((attachment, index) => (
+                                  <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                                    <span className="text-sm">{attachment.name}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={async () => {
+                                        try {
+                                          const { data, error } = await supabase.storage
+                                            .from('report-attachments')
+                                            .download(attachment.path);
+                                          
+                                          if (error) throw error;
+                                          
+                                          const url = URL.createObjectURL(data);
+                                          const a = document.createElement('a');
+                                          a.href = url;
+                                          a.download = attachment.name;
+                                          a.click();
+                                          URL.revokeObjectURL(url);
+                                        } catch (error) {
+                                          console.error('Error downloading file:', error);
+                                          toast({
+                                            title: "Error",
+                                            description: "Failed to download file",
+                                            variant: "destructive",
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           
                           {canReview && report.status === 'submitted' && (
                             <div className="space-y-4 border-t pt-4">
