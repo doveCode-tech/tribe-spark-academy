@@ -970,6 +970,10 @@ export type Database = {
         Args: { user_id: string }
         Returns: boolean
       }
+      is_tutor_or_admin: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
       is_ultimate_tutor_or_admin: {
         Args: { user_id: string }
         Returns: boolean
