@@ -69,8 +69,12 @@ export function ReportManagement() {
     title: '',
     content: '',
     student_id: '',
-    course_id: 'none'
+    course_id: 'none',
+    grade: '',
   });
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [reviewComments, setReviewComments] = useState('');
 
   const isAdmin = userProfile?.role === 'admin';
@@ -206,25 +210,56 @@ export function ReportManagement() {
 
   const createReport = async () => {
     try {
+      if (!newReport.title || !newReport.content || !newReport.student_id) {
+        toast({
+          title: "Validation Error",
+          description: "Please select a student and fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUploading(true);
+
       const reportData = {
-        ...newReport,
+        title: newReport.title,
+        content: newReport.content,
+        student_id: newReport.student_id,
         course_id: newReport.course_id === 'none' ? null : newReport.course_id,
+        grade: newReport.grade ? parseInt(newReport.grade) : null,
         tutor_id: userProfile?.auth_user_id,
         status: 'draft'
       };
 
-      const { error } = await supabase
+      const { data: createdReport, error: createError } = await supabase
         .from('reports')
-        .insert(reportData);
+        .insert(reportData)
+        .select('id')
+        .single();
 
-      if (error) throw error;
+      if (createError) throw createError;
+
+      // Upload attachments if any
+      const attachments = await uploadAttachments(createdReport.id);
+
+      // Update report with attachments
+      if (attachments.length > 0) {
+        const { error: updateError } = await supabase
+          .from('reports')
+          .update({ attachments })
+          .eq('id', createdReport.id);
+
+        if (updateError) throw updateError;
+      }
 
       toast({
         title: "Report Created",
         description: "Your report has been saved as a draft.",
       });
 
-      setNewReport({ title: '', content: '', student_id: '', course_id: 'none' });
+      setNewReport({ title: '', content: '', student_id: '', course_id: 'none', grade: '' });
+      setUploadedFiles([]);
+      setIsReportDialogOpen(false);
       loadReports();
     } catch (error: any) {
       console.error('Error creating report:', error);
@@ -233,7 +268,31 @@ export function ReportManagement() {
         description: error.message || "Failed to create report.",
         variant: "destructive",
       });
+    } finally {
+      setUploading(false);
     }
+  };
+
+  const uploadAttachments = async (reportId: string) => {
+    if (uploadedFiles.length === 0) return [];
+
+    const attachments: Array<{ name: string; path: string }> = [];
+
+    for (const file of uploadedFiles) {
+      const fileName = `${reportId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('report-attachments')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      attachments.push({
+        name: file.name,
+        path: fileName,
+      });
+    }
+
+    return attachments;
   };
 
   const createAndSubmitReport = async () => {
@@ -247,24 +306,65 @@ export function ReportManagement() {
         return;
       }
 
+      setUploading(true);
+
+      // Create report first
       const reportData = {
-        ...newReport,
+        title: newReport.title,
+        content: newReport.content,
+        student_id: newReport.student_id,
         course_id: newReport.course_id === 'none' ? null : newReport.course_id,
+        grade: newReport.grade ? parseInt(newReport.grade) : null,
         tutor_id: userProfile?.auth_user_id,
-        status: 'draft'
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
+      const { data: createdReport, error: createError } = await supabase
         .from('reports')
         .insert(reportData)
-        .select('id')
+        .select('id, title')
         .single();
 
-      if (error) throw error;
+      if (createError) throw createError;
 
-      await submitReport(data!.id);
+      // Upload attachments if any
+      const attachments = await uploadAttachments(createdReport.id);
 
-      setNewReport({ title: '', content: '', student_id: '', course_id: 'none' });
+      // Update report with attachments
+      if (attachments.length > 0) {
+        const { error: updateError } = await supabase
+          .from('reports')
+          .update({ attachments })
+          .eq('id', createdReport.id);
+
+        if (updateError) throw updateError;
+      }
+
+      // Get tutor name for notification
+      const tutorName = userProfile?.first_name
+        ? `${userProfile.first_name} ${userProfile.last_name || ''}`.trim()
+        : userProfile?.name || 'A tutor';
+
+      // Create notification for admin
+      await supabase.from('notifications').insert({
+        recipient_role: 'admin',
+        type: 'report_submitted',
+        title: 'New Report Submitted',
+        message: `A new report "${createdReport.title}" has been submitted for review by ${tutorName}`,
+        data: { report_id: createdReport.id }
+      });
+
+      toast({
+        title: "Report Sent to Admin",
+        description: "Your report has been submitted successfully.",
+      });
+
+      // Reset form and close dialog
+      setNewReport({ title: '', content: '', student_id: '', course_id: 'none', grade: '' });
+      setUploadedFiles([]);
+      setIsReportDialogOpen(false);
+      loadReports();
     } catch (error: any) {
       console.error('Error creating and submitting report:', error);
       toast({
@@ -272,6 +372,8 @@ export function ReportManagement() {
         description: error.message || "Failed to send report to admin.",
         variant: "destructive",
       });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -421,20 +523,20 @@ export function ReportManagement() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Report Management</h2>
         {canWrite && (
-          <Dialog>
+          <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 New Report
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create New Report</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="student">Student</Label>
+                  <Label htmlFor="student">Student *</Label>
                   <Select
                     value={newReport.student_id}
                     onValueChange={(value) => setNewReport(prev => ({ ...prev, student_id: value }))}
@@ -476,7 +578,7 @@ export function ReportManagement() {
                 </div>
 
                 <div>
-                  <Label htmlFor="title">Report Title</Label>
+                  <Label htmlFor="title">Report Title *</Label>
                   <Input
                     id="title"
                     value={newReport.title}
@@ -486,7 +588,7 @@ export function ReportManagement() {
                 </div>
 
                 <div>
-                  <Label htmlFor="content">Report Content</Label>
+                  <Label htmlFor="content">Report Content *</Label>
                   <Textarea
                     id="content"
                     value={newReport.content}
@@ -496,22 +598,53 @@ export function ReportManagement() {
                   />
                 </div>
 
+                <div>
+                  <Label htmlFor="grade">Grade (Optional)</Label>
+                  <Input
+                    id="grade"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={newReport.grade}
+                    onChange={(e) => setNewReport(prev => ({ ...prev, grade: e.target.value }))}
+                    placeholder="Enter grade (0-100)"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="attachments">Attachments (Optional)</Label>
+                  <Input
+                    id="attachments"
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setUploadedFiles(files);
+                    }}
+                  />
+                  {uploadedFiles.length > 0 && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {uploadedFiles.length} file(s) selected
+                    </p>
+                  )}
+                </div>
+
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => setNewReport({ title: '', content: '', student_id: '', course_id: 'none' })}
+                    onClick={() => setNewReport({ title: '', content: '', student_id: '', course_id: 'none', grade: '' })}
                   >
                     Clear
                   </Button>
                   <Button
                     onClick={createReport}
-                    disabled={!newReport.title || !newReport.content || !newReport.student_id}
+                    disabled={uploading || !newReport.title || !newReport.content || !newReport.student_id}
                   >
                     Save Draft
                   </Button>
                   <Button
                     onClick={createAndSubmitReport}
-                    disabled={!newReport.title || !newReport.content || !newReport.student_id}
+                    disabled={uploading || !newReport.title || !newReport.content || !newReport.student_id}
                   >
                     <Send className="w-4 h-4 mr-2" />
                     Send to Admin
