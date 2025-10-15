@@ -76,6 +76,7 @@ export function ReportManagement() {
   const [uploading, setUploading] = useState(false);
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [reviewComments, setReviewComments] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'rejected'>('all');
 
   const isAdmin = userProfile?.role === 'admin';
   const isUltimateTutor = userProfile?.role === 'ultimate_tutor';
@@ -419,7 +420,22 @@ export function ReportManagement() {
 
   const reviewReport = async (reportId: string, status: 'approved' | 'rejected') => {
     try {
-      const { error } = await supabase
+      // Validate rejection reason
+      if (status === 'rejected' && !reviewComments.trim()) {
+        toast({
+          title: "Rejection Reason Required",
+          description: "Please provide a reason for rejecting this report.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get report details for notification
+      const report = reports.find(r => r.id === reportId);
+      if (!report) throw new Error('Report not found');
+
+      // Update report status
+      const { error: updateError } = await supabase
         .from('reports')
         .update({
           status,
@@ -429,11 +445,52 @@ export function ReportManagement() {
         })
         .eq('id', reportId);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
+
+      // Get tutor details for notification
+      const { data: tutorData, error: tutorError } = await supabase
+        .from('users')
+        .select('email, first_name, last_name, name')
+        .eq('auth_user_id', report.tutor_id)
+        .single();
+
+      if (tutorError) throw tutorError;
+
+      const tutorName = tutorData.first_name
+        ? `${tutorData.first_name} ${tutorData.last_name || ''}`.trim()
+        : tutorData.name || 'Tutor';
+
+      // Create in-app notification for tutor
+      await supabase.from('notifications').insert({
+        recipient_user_id: report.tutor_id,
+        type: `report_${status}`,
+        title: `Report ${status === 'approved' ? 'Approved' : 'Rejected'}`,
+        message: `Your report "${report.title}" has been ${status}${reviewComments ? ': ' + reviewComments : ''}`,
+        data: { report_id: reportId, status, reviewer_comments: reviewComments }
+      });
+
+      // Send email notification to tutor
+      if (tutorData.email) {
+        try {
+          await supabase.functions.invoke('send-tutor-notification', {
+            body: {
+              tutorEmail: tutorData.email,
+              tutorName,
+              reportTitle: report.title,
+              status,
+              reviewerComments: reviewComments,
+              studentName: report.student_name
+            }
+          });
+        } catch (emailError) {
+          console.error('Error sending email notification:', emailError);
+          // Don't fail the whole operation if email fails
+        }
+      }
 
       toast({
-        title: `Report ${status}`,
-        description: `The report has been ${status}.`,
+        title: `Report ${status === 'approved' ? 'Approved' : 'Rejected'}`,
+        description: `The report has been ${status} and the tutor has been notified.`,
       });
 
       setSelectedReport(null);
@@ -517,6 +574,10 @@ export function ReportManagement() {
       default: return 'bg-muted text-muted-foreground';
     }
   };
+
+  const filteredReports = statusFilter === 'all' 
+    ? reports 
+    : reports.filter(report => report.status === statusFilter);
 
   return (
     <div className="space-y-6">
@@ -656,13 +717,58 @@ export function ReportManagement() {
         )}
       </div>
 
+      {/* Status Filter Tabs */}
+      {canReview && (
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant={statusFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter('all')}
+          >
+            All ({reports.length})
+          </Button>
+          <Button
+            variant={statusFilter === 'submitted' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter('submitted')}
+            className={statusFilter === 'submitted' ? '' : 'border-blue-200 text-blue-700 hover:bg-blue-50'}
+          >
+            Pending ({reports.filter(r => r.status === 'submitted').length})
+          </Button>
+          <Button
+            variant={statusFilter === 'approved' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter('approved')}
+            className={statusFilter === 'approved' ? '' : 'border-green-200 text-green-700 hover:bg-green-50'}
+          >
+            Approved ({reports.filter(r => r.status === 'approved').length})
+          </Button>
+          <Button
+            variant={statusFilter === 'rejected' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter('rejected')}
+            className={statusFilter === 'rejected' ? '' : 'border-red-200 text-red-700 hover:bg-red-50'}
+          >
+            Rejected ({reports.filter(r => r.status === 'rejected').length})
+          </Button>
+          <Button
+            variant={statusFilter === 'draft' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setStatusFilter('draft')}
+            className={statusFilter === 'draft' ? '' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}
+          >
+            Draft ({reports.filter(r => r.status === 'draft').length})
+          </Button>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
         </div>
       ) : (
         <div className="grid gap-4">
-          {reports.map((report) => (
+          {filteredReports.map((report) => (
             <Card key={report.id}>
               <CardContent className="p-4">
                 <div className="flex justify-between items-start">
@@ -840,11 +946,13 @@ export function ReportManagement() {
             </Card>
           ))}
 
-          {reports.length === 0 && (
+          {filteredReports.length === 0 && (
             <Card>
               <CardContent className="p-8 text-center">
                 <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No reports found</p>
+                <p className="text-muted-foreground">
+                  {statusFilter === 'all' ? 'No reports found' : `No ${statusFilter} reports found`}
+                </p>
               </CardContent>
             </Card>
           )}
