@@ -190,6 +190,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Tutor notification email sent successfully:", emailResponse);
 
+    // Note: audit log for email_sent is created by the calling code in ReportManagement
+    // to properly track the performer_by field with the admin's user ID
+
     return new Response(JSON.stringify({ 
       success: true,
       emailResponse 

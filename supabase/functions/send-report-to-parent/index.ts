@@ -256,20 +256,35 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Report email sent successfully:", emailResponse);
 
-    // Create audit log for successful send
-    await supabase.from("audit_logs").insert({
-      action_type: "send_report_to_parent",
-      performed_by: adminId,
-      target_id: reportId,
-      target_type: "report",
-      status: "success",
-      details: {
-        report_id: reportId,
-        student_id: report.student_id,
-        parent_email: parentEmail,
-        email_id: emailResponse.id,
+    // Create audit logs for successful send
+    await supabase.from("audit_logs").insert([
+      {
+        action_type: "send_report_to_parent",
+        performed_by: adminId,
+        target_id: reportId,
+        target_type: "report",
+        status: "success",
+        details: {
+          report_id: reportId,
+          student_id: report.student_id,
+          parent_email: parentEmail,
+          email_id: emailResponse.id,
+        },
       },
-    });
+      {
+        action_type: "email_sent",
+        performed_by: adminId,
+        target_id: reportId,
+        target_type: "report",
+        status: "success",
+        details: {
+          email_type: "report_to_parent",
+          recipient_email: parentEmail,
+          email_id: emailResponse.id,
+          report_title: report.title,
+        },
+      },
+    ]);
 
     return new Response(
       JSON.stringify({

@@ -249,6 +249,20 @@ export function ReportManagement() {
 
       if (createError) throw createError;
 
+      // Create audit log for report creation
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_created',
+        performed_by: userProfile?.auth_user_id,
+        target_id: createdReport.id,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: newReport.title,
+          student_id: newReport.student_id,
+          course_id: newReport.course_id === 'none' ? null : newReport.course_id,
+        },
+      });
+
       // Upload attachments if any
       const attachments = await uploadAttachments(createdReport.id);
 
@@ -338,6 +352,21 @@ export function ReportManagement() {
 
       if (createError) throw createError;
 
+      // Create audit log for report creation and submission
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_sent',
+        performed_by: userProfile?.auth_user_id,
+        target_id: createdReport.id,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: newReport.title,
+          student_id: newReport.student_id,
+          course_id: newReport.course_id === 'none' ? null : newReport.course_id,
+          submitted_to: 'admin',
+        },
+      });
+
       // Upload attachments if any
       const attachments = await uploadAttachments(createdReport.id);
 
@@ -399,6 +428,18 @@ export function ReportManagement() {
 
       if (error) throw error;
 
+      // Create audit log for report submission
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_sent',
+        performed_by: userProfile?.auth_user_id,
+        target_id: reportId,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          submitted_to: 'admin',
+        },
+      });
+
       // Notify admin about new report submission
       const report = reports.find(r => r.id === reportId);
       if (report) {
@@ -456,6 +497,21 @@ export function ReportManagement() {
 
       if (updateError) throw updateError;
 
+      // Create audit log for report review
+      await supabase.from('audit_logs').insert({
+        action_type: status === 'approved' ? 'report_approved' : 'report_rejected',
+        performed_by: userProfile?.auth_user_id,
+        target_id: reportId,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: report.title,
+          tutor_id: report.tutor_id,
+          student_id: report.student_id,
+          reviewer_comments: reviewComments,
+        },
+      });
+
       // Get tutor details for notification
       const { data: tutorData, error: tutorError } = await supabase
         .from('users')
@@ -491,8 +547,36 @@ export function ReportManagement() {
               studentName: report.student_name
             }
           });
+
+          // Log email send
+          await supabase.from('audit_logs').insert({
+            action_type: 'email_sent',
+            performed_by: userProfile?.auth_user_id,
+            target_id: reportId,
+            target_type: 'report',
+            status: 'success',
+            details: {
+              email_type: `report_${status}`,
+              recipient_email: tutorData.email,
+              report_title: report.title,
+            },
+          });
         } catch (emailError) {
           console.error('Error sending email notification:', emailError);
+          
+          // Log email failure
+          await supabase.from('audit_logs').insert({
+            action_type: 'email_sent',
+            performed_by: userProfile?.auth_user_id,
+            target_id: reportId,
+            target_type: 'report',
+            status: 'failed',
+            error_message: emailError instanceof Error ? emailError.message : 'Unknown error',
+            details: {
+              email_type: `report_${status}`,
+              recipient_email: tutorData.email,
+            },
+          });
           // Don't fail the whole operation if email fails
         }
       }
