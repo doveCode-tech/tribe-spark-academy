@@ -16,6 +16,25 @@ interface SendPortfolioRequest {
   adminId: string;
 }
 
+// Helper function to fetch image and convert to base64
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return `data:${response.headers.get('content-type')};base64,${btoa(binary)}`;
+  } catch (error) {
+    console.error('Error fetching image:', error);
+    return null;
+  }
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -90,6 +109,23 @@ const handler = async (req: Request): Promise<Response> => {
       .select("*")
       .eq("student_id", studentId);
 
+    // Fetch admin assets
+    const { data: adminAssets } = await supabase
+      .from("admin_settings")
+      .select("setting_key, setting_value")
+      .in("setting_key", ["company_logo_url"]);
+
+    let logoBase64: string | null = null;
+
+    if (adminAssets) {
+      for (const asset of adminAssets) {
+        const url = asset.setting_value?.url;
+        if (url && asset.setting_key === "company_logo_url") {
+          logoBase64 = await fetchImageAsBase64(url);
+        }
+      }
+    }
+
     // Generate PDF
     const fonts: TFontDictionary = {
       Roboto: {
@@ -119,7 +155,12 @@ const handler = async (req: Request): Promise<Response> => {
 
     const docDefinition = {
       content: [
-        {
+        logoBase64 ? {
+          image: logoBase64,
+          width: 80,
+          alignment: 'center',
+          margin: [0, 0, 0, 10]
+        } : {
           text: 'STEMTribe LMS',
           style: 'header',
           alignment: 'center',
