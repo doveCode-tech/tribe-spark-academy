@@ -865,6 +865,7 @@ export type Database = {
           name: string | null
           parent_email: string | null
           phone: string | null
+          report_required: boolean | null
           role: string | null
           role_level: number | null
           suspended: boolean | null
@@ -888,6 +889,7 @@ export type Database = {
           name?: string | null
           parent_email?: string | null
           phone?: string | null
+          report_required?: boolean | null
           role?: string | null
           role_level?: number | null
           suspended?: boolean | null
@@ -911,6 +913,7 @@ export type Database = {
           name?: string | null
           parent_email?: string | null
           phone?: string | null
+          report_required?: boolean | null
           role?: string | null
           role_level?: number | null
           suspended?: boolean | null
@@ -955,6 +958,7 @@ export type Database = {
           name: string | null
           parent_email: string | null
           phone: string | null
+          report_required: boolean | null
           role: string | null
           role_level: number | null
           suspended: boolean | null

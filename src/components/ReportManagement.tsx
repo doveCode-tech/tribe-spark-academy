@@ -164,34 +164,43 @@ export function ReportManagement() {
 
   const loadStudents = async () => {
     try {
-      // Get all students
+      // Get students who require reports (report_required = true)
       const { data: allStudents, error: studentsError } = await supabase
         .from('users')
-        .select('auth_user_id, first_name, last_name, name, email')
-        .eq('role', 'student');
+        .select('auth_user_id, first_name, last_name, name, email, report_required')
+        .eq('role', 'student')
+        .eq('report_required', true);
 
       if (studentsError) throw studentsError;
 
-      // Get students who already have approved reports
-      const { data: approvedReports, error: reportsError } = await supabase
-        .from('reports')
-        .select('student_id')
-        .eq('status', 'approved');
-
-      if (reportsError) throw reportsError;
-
-      // Filter out students with approved reports
-      const studentsWithApprovedReports = new Set(
-        (approvedReports || []).map(r => r.student_id)
-      );
-
-      const availableStudents = (allStudents || []).filter(
-        student => !studentsWithApprovedReports.has(student.auth_user_id)
-      );
-
-      setStudents(availableStudents);
+      setStudents(allStudents || []);
     } catch (error) {
       console.error('Error loading students:', error);
+    }
+  };
+
+  const resetReportingCycle = async () => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ report_required: true })
+        .eq('role', 'student');
+
+      if (error) throw error;
+
+      toast({
+        title: "Reporting Cycle Reset",
+        description: "All students have been marked as requiring reports.",
+      });
+
+      loadStudents();
+    } catch (error: any) {
+      console.error('Error resetting reporting cycle:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset reporting cycle.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -566,14 +575,24 @@ export function ReportManagement() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Report Management</h2>
-        {canWrite && (
-          <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                New Report
-              </Button>
-            </DialogTrigger>
+        <div className="flex gap-2">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={resetReportingCycle}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Reset Reporting Cycle
+            </Button>
+          )}
+          {canWrite && (
+            <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Report
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create New Report</DialogTitle>
@@ -696,8 +715,9 @@ export function ReportManagement() {
                 </div>
               </div>
             </DialogContent>
-          </Dialog>
-        )}
+            </Dialog>
+          )}
+        </div>
       </div>
 
       {/* Status Filter Tabs */}
