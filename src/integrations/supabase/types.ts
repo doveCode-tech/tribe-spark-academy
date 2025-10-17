@@ -479,6 +479,8 @@ export type Database = {
       }
       lessons: {
         Row: {
+          assignment_data: Json | null
+          assignment_required: boolean | null
           content: string | null
           content_type: string | null
           course_id: string | null
@@ -487,13 +489,18 @@ export type Database = {
           duration_minutes: number | null
           exercises: Json | null
           id: string
+          is_end_of_course: boolean | null
           order_index: number
+          quiz_data: Json | null
+          quiz_required: boolean | null
           title: string
           updated_at: string
           video_url: string | null
           video_urls: string[] | null
         }
         Insert: {
+          assignment_data?: Json | null
+          assignment_required?: boolean | null
           content?: string | null
           content_type?: string | null
           course_id?: string | null
@@ -502,13 +509,18 @@ export type Database = {
           duration_minutes?: number | null
           exercises?: Json | null
           id?: string
+          is_end_of_course?: boolean | null
           order_index?: number
+          quiz_data?: Json | null
+          quiz_required?: boolean | null
           title: string
           updated_at?: string
           video_url?: string | null
           video_urls?: string[] | null
         }
         Update: {
+          assignment_data?: Json | null
+          assignment_required?: boolean | null
           content?: string | null
           content_type?: string | null
           course_id?: string | null
@@ -517,7 +529,10 @@ export type Database = {
           duration_minutes?: number | null
           exercises?: Json | null
           id?: string
+          is_end_of_course?: boolean | null
           order_index?: number
+          quiz_data?: Json | null
+          quiz_required?: boolean | null
           title?: string
           updated_at?: string
           video_url?: string | null
