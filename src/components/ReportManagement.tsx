@@ -79,6 +79,8 @@ export function ReportManagement() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'rejected'>('all');
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [viewingDraft, setViewingDraft] = useState<Report | null>(null);
+  const [isDraftDialogOpen, setIsDraftDialogOpen] = useState(false);
   const [editedContent, setEditedContent] = useState({
     title: '',
     content: '',
@@ -658,6 +660,155 @@ export function ReportManagement() {
     setIsEditDialogOpen(true);
   };
 
+  const openDraftDialog = (report: Report) => {
+    setViewingDraft(report);
+    setEditedContent({
+      title: report.title,
+      content: report.content,
+      grade: report.grade?.toString() || '',
+    });
+    setIsDraftDialogOpen(true);
+  };
+
+  const updateDraft = async () => {
+    if (!viewingDraft) return;
+
+    try {
+      if (!editedContent.title || !editedContent.content) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUploading(true);
+
+      // Update draft report
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          title: editedContent.title,
+          content: editedContent.content,
+          grade: editedContent.grade ? parseInt(editedContent.grade) : null,
+        })
+        .eq('id', viewingDraft.id);
+
+      if (updateError) throw updateError;
+
+      // Create audit log for draft update
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_created',
+        performed_by: userProfile?.auth_user_id,
+        target_id: viewingDraft.id,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: editedContent.title,
+          action: 'draft_updated',
+        },
+      });
+
+      toast({
+        title: "Draft Saved",
+        description: "Your draft has been updated successfully.",
+      });
+
+      setIsDraftDialogOpen(false);
+      setViewingDraft(null);
+      setEditedContent({ title: '', content: '', grade: '' });
+      loadReports();
+    } catch (error: any) {
+      console.error('Error updating draft:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update draft.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submitDraft = async () => {
+    if (!viewingDraft) return;
+
+    try {
+      if (!editedContent.title || !editedContent.content) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUploading(true);
+
+      // Update draft and set to submitted
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          title: editedContent.title,
+          content: editedContent.content,
+          grade: editedContent.grade ? parseInt(editedContent.grade) : null,
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('id', viewingDraft.id);
+
+      if (updateError) throw updateError;
+
+      // Create audit log for submission
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_sent',
+        performed_by: userProfile?.auth_user_id,
+        target_id: viewingDraft.id,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: editedContent.title,
+          student_id: viewingDraft.student_id,
+          submitted_to: 'admin',
+        },
+      });
+
+      // Get tutor name for notification
+      const tutorName = userProfile?.first_name
+        ? `${userProfile.first_name} ${userProfile.last_name || ''}`.trim()
+        : userProfile?.name || 'A tutor';
+
+      // Notify admin
+      await supabase.from('notifications').insert({
+        recipient_role: 'admin',
+        type: 'report_submitted',
+        title: 'New Report Submitted',
+        message: `Report "${editedContent.title}" has been submitted for review by ${tutorName}`,
+        data: { report_id: viewingDraft.id }
+      });
+
+      toast({
+        title: "Report Sent to Admin",
+        description: "Your report has been submitted successfully.",
+      });
+
+      setIsDraftDialogOpen(false);
+      setViewingDraft(null);
+      setEditedContent({ title: '', content: '', grade: '' });
+      loadReports();
+    } catch (error: any) {
+      console.error('Error submitting draft:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit report.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const resubmitReport = async () => {
     if (!editingReport) return;
 
@@ -996,14 +1147,25 @@ export function ReportManagement() {
                   </div>
                   
                   <div className="flex gap-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
+                    {/* For draft reports, open in editable mode */}
+                    {report.status === 'draft' && report.tutor_id === userProfile?.auth_user_id ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => openDraftDialog(report)}
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        View
+                      </Button>
+                    ) : (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Eye className="w-4 h-4 mr-2" />
+                            View
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
                         <DialogHeader>
                           <DialogTitle>{report.title}</DialogTitle>
                         </DialogHeader>
@@ -1108,15 +1270,6 @@ export function ReportManagement() {
                         </div>
                       </DialogContent>
                     </Dialog>
-
-                    {report.status === 'draft' && (report.tutor_id === userProfile?.auth_user_id || canReview) && (
-                      <Button
-                        size="sm"
-                        onClick={() => submitReport(report.id)}
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        Send to Admin
-                      </Button>
                     )}
 
                     {report.status === 'approved' && canReview && (
@@ -1233,6 +1386,92 @@ export function ReportManagement() {
                 >
                   <Send className="w-4 h-4 mr-2" />
                   {uploading ? 'Resubmitting...' : 'Resubmit to Admin'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Draft Edit Dialog */}
+      <Dialog open={isDraftDialogOpen} onOpenChange={setIsDraftDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Draft Report</DialogTitle>
+          </DialogHeader>
+          
+          {viewingDraft && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium">Student:</span> {viewingDraft.student_name}
+                </p>
+                {viewingDraft.course_title && (
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium">Course:</span> {viewingDraft.course_title}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="draft-title">Report Title *</Label>
+                <Input
+                  id="draft-title"
+                  value={editedContent.title}
+                  onChange={(e) => setEditedContent(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Enter report title"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="draft-content">Report Content *</Label>
+                <Textarea
+                  id="draft-content"
+                  value={editedContent.content}
+                  onChange={(e) => setEditedContent(prev => ({ ...prev, content: e.target.value }))}
+                  placeholder="Write your report here..."
+                  rows={12}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="draft-grade">Grade (Optional)</Label>
+                <Input
+                  id="draft-grade"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={editedContent.grade}
+                  onChange={(e) => setEditedContent(prev => ({ ...prev, grade: e.target.value }))}
+                  placeholder="Enter grade (0-100)"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsDraftDialogOpen(false);
+                    setViewingDraft(null);
+                    setEditedContent({ title: '', content: '', grade: '' });
+                  }}
+                  disabled={uploading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={updateDraft}
+                  disabled={uploading || !editedContent.title || !editedContent.content}
+                >
+                  {uploading ? 'Saving...' : 'Save Draft'}
+                </Button>
+                <Button
+                  onClick={submitDraft}
+                  disabled={uploading || !editedContent.title || !editedContent.content}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {uploading ? 'Sending...' : 'Send to Admin'}
                 </Button>
               </div>
             </div>
