@@ -19,7 +19,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Send, Check, X, Eye, Plus, Download, Edit } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { FileText, Send, Check, X, Eye, Plus, Download, Edit, Filter, Calendar as CalendarIcon, ChevronDown } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -77,6 +100,13 @@ export function ReportManagement() {
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [reviewComments, setReviewComments] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'rejected'>('all');
+  const [studentFilter, setStudentFilter] = useState('');
+  const [tutorFilter, setTutorFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [studentSearchOpen, setStudentSearchOpen] = useState(false);
+  const itemsPerPage = 10;
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [viewingDraft, setViewingDraft] = useState<Report | null>(null);
@@ -904,9 +934,64 @@ export function ReportManagement() {
     }
   };
 
-  const filteredReports = statusFilter === 'all' 
-    ? reports 
-    : reports.filter(report => report.status === statusFilter);
+  // Get unique tutors for filter
+  const uniqueTutors = Array.from(
+    new Map(
+      reports
+        .filter((r) => r.tutor_id && r.tutor_name)
+        .map((r) => [r.tutor_id, { id: r.tutor_id, name: r.tutor_name || 'Unknown' }])
+    ).values()
+  );
+
+  // Apply all filters
+  const filteredReports = reports.filter(report => {
+    // Status filter
+    if (statusFilter !== 'all' && report.status !== statusFilter) return false;
+    
+    // Student name filter
+    if (studentFilter && !report.student_name?.toLowerCase().includes(studentFilter.toLowerCase())) return false;
+    
+    // Tutor filter
+    if (tutorFilter !== 'all' && report.tutor_id !== tutorFilter) return false;
+    
+    // Date range filter
+    if (dateFrom) {
+      const reportDate = new Date(report.created_at);
+      if (reportDate < dateFrom) return false;
+    }
+    if (dateTo) {
+      const reportDate = new Date(report.created_at);
+      const endOfDay = new Date(dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      if (reportDate > endOfDay) return false;
+    }
+    
+    return true;
+  });
+
+  // Pagination
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
+  const paginatedReports = filteredReports.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, studentFilter, tutorFilter, dateFrom, dateTo]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setStudentFilter('');
+    setTutorFilter('all');
+    setDateFrom(undefined);
+    setDateTo(undefined);
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = statusFilter !== 'all' || studentFilter || tutorFilter !== 'all' || dateFrom || dateTo;
 
   return (
     <div className="space-y-6">
@@ -1057,49 +1142,194 @@ export function ReportManagement() {
         </div>
       </div>
 
-      {/* Status Filter Tabs */}
+      {/* Filters Section */}
       {canReview && (
-        <div className="flex gap-2 flex-wrap">
-          <Button
-            variant={statusFilter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('all')}
-          >
-            All ({reports.length})
-          </Button>
-          <Button
-            variant={statusFilter === 'submitted' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('submitted')}
-            className={statusFilter === 'submitted' ? '' : 'border-blue-200 text-blue-700 hover:bg-blue-50'}
-          >
-            Pending ({reports.filter(r => r.status === 'submitted').length})
-          </Button>
-          <Button
-            variant={statusFilter === 'approved' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('approved')}
-            className={statusFilter === 'approved' ? '' : 'border-green-200 text-green-700 hover:bg-green-50'}
-          >
-            Approved ({reports.filter(r => r.status === 'approved').length})
-          </Button>
-          <Button
-            variant={statusFilter === 'rejected' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('rejected')}
-            className={statusFilter === 'rejected' ? '' : 'border-red-200 text-red-700 hover:bg-red-50'}
-          >
-            Rejected ({reports.filter(r => r.status === 'rejected').length})
-          </Button>
-          <Button
-            variant={statusFilter === 'draft' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('draft')}
-            className={statusFilter === 'draft' ? '' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}
-          >
-            Draft ({reports.filter(r => r.status === 'draft').length})
-          </Button>
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-4">
+              {/* Status Filter Tabs */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Status:</span>
+                <Button
+                  variant={statusFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('all')}
+                >
+                  All ({reports.length})
+                </Button>
+                <Button
+                  variant={statusFilter === 'submitted' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('submitted')}
+                  className={statusFilter === 'submitted' ? '' : 'border-blue-200 text-blue-700 hover:bg-blue-50'}
+                >
+                  Pending ({reports.filter(r => r.status === 'submitted').length})
+                </Button>
+                <Button
+                  variant={statusFilter === 'approved' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('approved')}
+                  className={statusFilter === 'approved' ? '' : 'border-green-200 text-green-700 hover:bg-green-50'}
+                >
+                  Approved ({reports.filter(r => r.status === 'approved').length})
+                </Button>
+                <Button
+                  variant={statusFilter === 'rejected' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('rejected')}
+                  className={statusFilter === 'rejected' ? '' : 'border-red-200 text-red-700 hover:bg-red-50'}
+                >
+                  Rejected ({reports.filter(r => r.status === 'rejected').length})
+                </Button>
+                <Button
+                  variant={statusFilter === 'draft' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('draft')}
+                  className={statusFilter === 'draft' ? '' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}
+                >
+                  Draft ({reports.filter(r => r.status === 'draft').length})
+                </Button>
+              </div>
+
+              {/* Additional Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Student Name Filter */}
+                <div className="space-y-2">
+                  <Label>Student Name</Label>
+                  <Popover open={studentSearchOpen} onOpenChange={setStudentSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={studentSearchOpen}
+                        className="w-full justify-between"
+                      >
+                        {studentFilter
+                          ? reports.find((r) => r.student_name?.toLowerCase().includes(studentFilter.toLowerCase()))?.student_name || studentFilter
+                          : "All students"}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search student..." />
+                        <CommandList>
+                          <CommandEmpty>No student found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value=""
+                              onSelect={() => {
+                                setStudentFilter('');
+                                setStudentSearchOpen(false);
+                              }}
+                            >
+                              All students
+                            </CommandItem>
+                            {Array.from(new Set(reports.map(r => r.student_name).filter(Boolean))).map((name) => (
+                              <CommandItem
+                                key={name}
+                                value={name || ''}
+                                onSelect={(value) => {
+                                  setStudentFilter(value);
+                                  setStudentSearchOpen(false);
+                                }}
+                              >
+                                {name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Tutor Filter */}
+                <div className="space-y-2">
+                  <Label>Tutor</Label>
+                  <Select value={tutorFilter} onValueChange={setTutorFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select tutor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All tutors</SelectItem>
+                      {uniqueTutors.map((tutor) => (
+                        <SelectItem key={tutor.id} value={tutor.id}>
+                          {tutor.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Date From Filter */}
+                <div className="space-y-2">
+                  <Label>From Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateFrom ? format(dateFrom, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dateFrom}
+                        onSelect={setDateFrom}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Date To Filter */}
+                <div className="space-y-2">
+                  <Label>To Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateTo ? format(dateTo, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dateTo}
+                        onSelect={setDateTo}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {hasActiveFilters && (
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {filteredReports.length} of {reports.length} reports
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                  >
+                    Clear all filters
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {loading ? (
@@ -1107,8 +1337,9 @@ export function ReportManagement() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {filteredReports.map((report) => (
+        <div className="space-y-4">
+          <div className="grid gap-4">
+            {paginatedReports.map((report) => (
             <Card key={report.id}>
               <CardContent className="p-4">
                 <div className="flex justify-between items-start">
@@ -1299,15 +1530,49 @@ export function ReportManagement() {
             </Card>
           ))}
 
-          {filteredReports.length === 0 && (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  {statusFilter === 'all' ? 'No reports found' : `No ${statusFilter} reports found`}
-                </p>
-              </CardContent>
-            </Card>
+            {filteredReports.length === 0 && (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">
+                    {hasActiveFilters ? 'No reports match the selected filters' : 'No reports found'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {filteredReports.length > itemsPerPage && (
+            <div className="flex justify-center">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(page)}
+                        isActive={currentPage === page}
+                        className="cursor-pointer"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           )}
         </div>
       )}
