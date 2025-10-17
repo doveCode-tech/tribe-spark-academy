@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Send, Check, X, Eye, Plus, Download } from "lucide-react";
+import { FileText, Send, Check, X, Eye, Plus, Download, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -77,6 +77,13 @@ export function ReportManagement() {
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [reviewComments, setReviewComments] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'submitted' | 'approved' | 'rejected'>('all');
+  const [editingReport, setEditingReport] = useState<Report | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editedContent, setEditedContent] = useState({
+    title: '',
+    content: '',
+    grade: '',
+  });
 
   const isAdmin = userProfile?.role === 'admin';
   const isUltimateTutor = userProfile?.role === 'ultimate_tutor';
@@ -641,6 +648,101 @@ export function ReportManagement() {
     }
   };
 
+  const openEditDialog = (report: Report) => {
+    setEditingReport(report);
+    setEditedContent({
+      title: report.title,
+      content: report.content,
+      grade: report.grade?.toString() || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const resubmitReport = async () => {
+    if (!editingReport) return;
+
+    try {
+      if (!editedContent.title || !editedContent.content) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUploading(true);
+
+      // Update report with new content and set status to submitted
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          title: editedContent.title,
+          content: editedContent.content,
+          grade: editedContent.grade ? parseInt(editedContent.grade) : null,
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+          reviewer_comments: null,
+          reviewed_at: null,
+          reviewed_by: null,
+        })
+        .eq('id', editingReport.id);
+
+      if (updateError) throw updateError;
+
+      // Create audit log for resubmission
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_sent',
+        performed_by: userProfile?.auth_user_id,
+        target_id: editingReport.id,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: editedContent.title,
+          student_id: editingReport.student_id,
+          resubmission: true,
+          previous_status: 'rejected',
+        },
+      });
+
+      // Get tutor name for notification
+      const tutorName = userProfile?.first_name
+        ? `${userProfile.first_name} ${userProfile.last_name || ''}`.trim()
+        : userProfile?.name || 'A tutor';
+
+      // Notify admin about resubmission
+      await supabase.from('notifications').insert({
+        recipient_role: 'admin',
+        type: 'report_submitted',
+        title: 'Report Resubmitted',
+        message: `Report "${editedContent.title}" has been edited and resubmitted for review by ${tutorName}`,
+        data: { 
+          report_id: editingReport.id,
+          resubmission: true 
+        }
+      });
+
+      toast({
+        title: "Report Resubmitted",
+        description: "Your report has been resubmitted for review.",
+      });
+
+      setIsEditDialogOpen(false);
+      setEditingReport(null);
+      setEditedContent({ title: '', content: '', grade: '' });
+      loadReports();
+    } catch (error: any) {
+      console.error('Error resubmitting report:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resubmit report.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-muted text-muted-foreground';
@@ -1027,6 +1129,17 @@ export function ReportManagement() {
                         Send to Parent
                       </Button>
                     )}
+
+                    {report.status === 'rejected' && report.tutor_id === userProfile?.auth_user_id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEditDialog(report)}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit & Resubmit
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -1045,6 +1158,87 @@ export function ReportManagement() {
           )}
         </div>
       )}
+
+      {/* Edit & Resubmit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit & Resubmit Report</DialogTitle>
+          </DialogHeader>
+          
+          {editingReport && (
+            <div className="space-y-4">
+              {/* Show rejection reason */}
+              {editingReport.reviewer_comments && (
+                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <X className="w-5 h-5 text-destructive mt-0.5" />
+                    <div>
+                      <p className="font-medium text-destructive">Rejection Reason:</p>
+                      <p className="text-sm mt-1">{editingReport.reviewer_comments}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="edit-title">Report Title *</Label>
+                <Input
+                  id="edit-title"
+                  value={editedContent.title}
+                  onChange={(e) => setEditedContent(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Enter report title"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-content">Report Content *</Label>
+                <Textarea
+                  id="edit-content"
+                  value={editedContent.content}
+                  onChange={(e) => setEditedContent(prev => ({ ...prev, content: e.target.value }))}
+                  placeholder="Write your report here..."
+                  rows={12}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-grade">Grade (Optional)</Label>
+                <Input
+                  id="edit-grade"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={editedContent.grade}
+                  onChange={(e) => setEditedContent(prev => ({ ...prev, grade: e.target.value }))}
+                  placeholder="Enter grade (0-100)"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditDialogOpen(false);
+                    setEditingReport(null);
+                    setEditedContent({ title: '', content: '', grade: '' });
+                  }}
+                  disabled={uploading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={resubmitReport}
+                  disabled={uploading || !editedContent.title || !editedContent.content}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {uploading ? 'Resubmitting...' : 'Resubmit to Admin'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
