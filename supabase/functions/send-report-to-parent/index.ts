@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "npm:resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.5";
+import PdfPrinter from "npm:pdfmake@0.2.10";
+import { TFontDictionary } from "npm:pdfmake@0.2.10/interfaces.d.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -101,7 +103,172 @@ const handler = async (req: Request): Promise<Response> => {
     const tutorName = `${report.tutor?.first_name || ''} ${report.tutor?.last_name || ''}`.trim();
     const courseTitle = report.course?.title || 'Course';
 
-    // Generate PDF-style HTML content
+    // Generate PDF
+    const fonts: TFontDictionary = {
+      Roboto: {
+        normal: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf',
+        bold: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf',
+        italics: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Italic.ttf',
+        bolditalics: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-MediumItalic.ttf'
+      }
+    };
+
+    const printer = new PdfPrinter(fonts);
+    
+    const docDefinition = {
+      content: [
+        {
+          text: 'STEMTribe LMS',
+          style: 'header',
+          alignment: 'center',
+          margin: [0, 0, 0, 10]
+        },
+        {
+          text: 'Student Progress Report',
+          style: 'subheader',
+          alignment: 'center',
+          margin: [0, 0, 0, 30]
+        },
+        {
+          text: 'Progress Report',
+          style: 'reportTitle',
+          margin: [0, 0, 0, 20]
+        },
+        {
+          columns: [
+            { text: 'Student:', bold: true, width: 100 },
+            { text: studentName, width: '*' }
+          ],
+          margin: [0, 5, 0, 5]
+        },
+        {
+          columns: [
+            { text: 'Course:', bold: true, width: 100 },
+            { text: courseTitle, width: '*' }
+          ],
+          margin: [0, 5, 0, 5]
+        },
+        {
+          columns: [
+            { text: 'Tutor:', bold: true, width: 100 },
+            { text: tutorName, width: '*' }
+          ],
+          margin: [0, 5, 0, 5]
+        },
+        {
+          columns: [
+            { text: 'Report Date:', bold: true, width: 100 },
+            { text: new Date(report.created_at).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }), width: '*' }
+          ],
+          margin: [0, 5, 0, 5]
+        },
+        report.grade ? {
+          columns: [
+            { text: 'Grade:', bold: true, width: 100 },
+            { text: `${report.grade}%`, width: '*', color: '#10B981', bold: true }
+          ],
+          margin: [0, 5, 0, 20]
+        } : { text: '', margin: [0, 0, 0, 20] },
+        {
+          text: report.title,
+          style: 'sectionTitle',
+          margin: [0, 20, 0, 10]
+        },
+        {
+          text: report.content,
+          style: 'reportContent',
+          margin: [0, 0, 0, 20]
+        },
+        report.reviewer_comments ? {
+          stack: [
+            {
+              text: 'Admin Review Comments',
+              style: 'sectionTitle',
+              margin: [0, 20, 0, 10]
+            },
+            {
+              text: report.reviewer_comments,
+              style: 'reviewComments',
+              margin: [0, 0, 0, 20]
+            }
+          ]
+        } : {},
+        {
+          text: `© ${new Date().getFullYear()} STEMTribe LMS`,
+          style: 'footer',
+          alignment: 'center',
+          margin: [0, 30, 0, 10]
+        },
+        {
+          text: 'This is an official student progress report.',
+          style: 'footer',
+          alignment: 'center'
+        }
+      ],
+      styles: {
+        header: {
+          fontSize: 22,
+          bold: true,
+          color: '#5B21B6'
+        },
+        subheader: {
+          fontSize: 16,
+          color: '#6366F1'
+        },
+        reportTitle: {
+          fontSize: 18,
+          bold: true,
+          color: '#5B21B6'
+        },
+        sectionTitle: {
+          fontSize: 14,
+          bold: true,
+          color: '#5B21B6'
+        },
+        reportContent: {
+          fontSize: 11,
+          lineHeight: 1.5
+        },
+        reviewComments: {
+          fontSize: 11,
+          lineHeight: 1.5,
+          background: '#f0f9ff'
+        },
+        footer: {
+          fontSize: 10,
+          color: '#666'
+        }
+      },
+      defaultStyle: {
+        font: 'Roboto'
+      }
+    };
+
+    const pdfDoc = printer.createPdfKitDocument(docDefinition as any);
+    const chunks: Uint8Array[] = [];
+    
+    pdfDoc.on('data', (chunk: Uint8Array) => chunks.push(chunk));
+    
+    await new Promise<void>((resolve, reject) => {
+      pdfDoc.on('end', () => resolve());
+      pdfDoc.on('error', reject);
+      pdfDoc.end();
+    });
+
+    const pdfBuffer = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) {
+      pdfBuffer.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const pdfBase64 = btoa(String.fromCharCode(...pdfBuffer));
+
+    // Generate simple HTML email content
     const reportHtml = `
       <!DOCTYPE html>
       <html>
@@ -246,12 +413,18 @@ const handler = async (req: Request): Promise<Response> => {
       </html>
     `;
 
-    // Send email with HTML report (as PDF-equivalent)
+    // Send email with PDF attachment
     const emailResponse = await resend.emails.send({
       from: "STEMTribe LMS <onboarding@resend.dev>",
       to: [parentEmail],
       subject: `Progress Report for ${studentName} - ${courseTitle}`,
       html: reportHtml,
+      attachments: [
+        {
+          filename: `${studentName}_Report_${new Date().toISOString().split('T')[0]}.pdf`,
+          content: pdfBase64,
+        }
+      ],
     });
 
     console.log("Report email sent successfully:", emailResponse);

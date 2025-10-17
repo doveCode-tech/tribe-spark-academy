@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, FileText, Upload, X, Save } from "lucide-react";
+import { Search, FileText, Upload, X, Save, Mail, Award } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -70,6 +70,112 @@ export function StudentsList() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isTutor = userProfile?.role === 'tutor' || userProfile?.role === 'ultimate_tutor';
+  const isAdmin = userProfile?.role === 'admin';
+
+  const sendPortfolioEmail = async (student: Student) => {
+    try {
+      toast({
+        title: "Sending Portfolio",
+        description: "Generating and sending portfolio PDF...",
+      });
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase.functions.invoke('send-portfolio-email', {
+        body: {
+          studentId: student.auth_user_id,
+          adminId: user.id,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to send portfolio.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Portfolio Sent",
+        description: data.message || "Portfolio PDF successfully sent to parent!",
+      });
+    } catch (error: any) {
+      console.error('Error sending portfolio:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send portfolio.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const sendCertificateEmail = async (student: Student) => {
+    try {
+      // First, fetch student's certificates
+      const { data: certificates, error: certError } = await supabase
+        .from('certificates')
+        .select('id, course_title, completion_date')
+        .eq('student_id', student.auth_user_id)
+        .order('completion_date', { ascending: false });
+
+      if (certError) throw certError;
+
+      if (!certificates || certificates.length === 0) {
+        toast({
+          title: "No Certificates",
+          description: "This student has no certificates yet.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Use the most recent certificate
+      const certificateId = certificates[0].id;
+
+      toast({
+        title: "Sending Certificate",
+        description: "Generating and sending certificate PDF...",
+      });
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase.functions.invoke('send-certificate-email', {
+        body: {
+          certificateId,
+          adminId: user.id,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to send certificate.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Certificate Sent",
+        description: data.message || "Certificate PDF successfully sent to parent!",
+      });
+    } catch (error: any) {
+      console.error('Error sending certificate:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send certificate.",
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     loadStudents();
@@ -344,20 +450,21 @@ export function StudentsList() {
                   </div>
                 </div>
 
-                {isTutor && (
-                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setSelectedStudent(student);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <FileText className="w-4 h-4 mr-2" />
-                        Write Report
-                      </Button>
-                    </DialogTrigger>
+                <div className="flex gap-2">
+                  {isTutor && (
+                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedStudent(student);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Write Report
+                        </Button>
+                      </DialogTrigger>
                     <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Create Report for {getStudentDisplayName(student)}</DialogTitle>
@@ -503,7 +610,29 @@ export function StudentsList() {
                       </div>
                     </DialogContent>
                   </Dialog>
-                )}
+                  )}
+
+                  {isAdmin && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => sendPortfolioEmail(student)}
+                      >
+                        <Mail className="w-4 h-4 mr-2" />
+                        Send Portfolio
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => sendCertificateEmail(student)}
+                      >
+                        <Award className="w-4 h-4 mr-2" />
+                        Send Certificate
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
 
