@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action_type: string
+          created_at: string | null
+          details: Json | null
+          error_message: string | null
+          id: string
+          performed_by: string | null
+          status: string
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string | null
+          details?: Json | null
+          error_message?: string | null
+          id?: string
+          performed_by?: string | null
+          status: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string | null
+          details?: Json | null
+          error_message?: string | null
+          id?: string
+          performed_by?: string | null
+          status?: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: []
+      }
       badges: {
         Row: {
           color: string | null
@@ -827,6 +863,7 @@ export type Database = {
           last_login: string | null
           last_name: string | null
           name: string | null
+          parent_email: string | null
           phone: string | null
           role: string | null
           role_level: number | null
@@ -849,6 +886,7 @@ export type Database = {
           last_login?: string | null
           last_name?: string | null
           name?: string | null
+          parent_email?: string | null
           phone?: string | null
           role?: string | null
           role_level?: number | null
@@ -871,6 +909,7 @@ export type Database = {
           last_login?: string | null
           last_name?: string | null
           name?: string | null
+          parent_email?: string | null
           phone?: string | null
           role?: string | null
           role_level?: number | null
@@ -914,6 +953,7 @@ export type Database = {
           last_login: string | null
           last_name: string | null
           name: string | null
+          parent_email: string | null
           phone: string | null
           role: string | null
           role_level: number | null

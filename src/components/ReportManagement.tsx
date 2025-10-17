@@ -506,54 +506,37 @@ export function ReportManagement() {
     }
   };
 
-  const sendReportToParent = async (report: Report) => {
+  const sendReportToParent = async (reportId: string) => {
     try {
-      // Get student details including parent email
-      const { data: studentData, error: studentError } = await supabase
-        .from('users')
-        .select('email, first_name, last_name, name')
-        .eq('auth_user_id', report.student_id)
-        .single();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
 
-      if (studentError) throw studentError;
+      toast({
+        title: "Sending Report",
+        description: "Sending report to parent...",
+      });
 
-      if (!studentData?.email) {
-        throw new Error('Student email not found');
-      }
-
-      // Get tutor name
-      const { data: tutorData } = await supabase
-        .from('users')
-        .select('first_name, last_name, name')
-        .eq('auth_user_id', report.tutor_id)
-        .single();
-
-      const studentName = studentData.first_name
-        ? `${studentData.first_name} ${studentData.last_name || ''}`.trim()
-        : studentData.name || studentData.email;
-
-      const tutorName = tutorData?.first_name
-        ? `${tutorData.first_name} ${tutorData.last_name || ''}`.trim()
-        : tutorData?.name || 'Your Tutor';
-
-      // Send email via edge function
-      const { data, error } = await supabase.functions.invoke('send-report-email', {
+      const { data, error } = await supabase.functions.invoke('send-report-to-parent', {
         body: {
-          reportId: report.id,
-          parentEmail: studentData.email,
-          studentName,
-          reportTitle: report.title,
-          reportContent: report.content,
-          tutorName,
-          courseName: report.course_title || undefined
-        }
+          reportId,
+          adminId: user.id,
+        },
       });
 
       if (error) throw error;
 
+      if (!data.success) {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to send report to parent.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
         title: "Report Sent",
-        description: `Report has been sent to ${studentData.email}`,
+        description: data.message || "Report successfully sent to parent!",
       });
     } catch (error: any) {
       console.error('Error sending report to parent:', error);
@@ -934,7 +917,7 @@ export function ReportManagement() {
                       <Button
                         size="sm"
                         variant="default"
-                        onClick={() => sendReportToParent(report)}
+                        onClick={() => sendReportToParent(report.id)}
                       >
                         <Send className="w-4 h-4 mr-2" />
                         Send to Parent
