@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { HeroSection } from "./HeroSection";
 import { CourseCard } from "./CourseCard";
+import { StudentProjectsList } from "./StudentProjectsList";
 
 
 export function StudentDashboard() {
@@ -228,6 +229,8 @@ export function StudentDashboard() {
             </div>
           )}
 
+          {/* Student Projects List */}
+          <StudentProjectsList />
         </div>
 
         {/* Sidebar - Achievements and AI Recommendations */}

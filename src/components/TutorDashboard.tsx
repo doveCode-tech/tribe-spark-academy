@@ -7,6 +7,7 @@ import { BookOpen, Users, FileText, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { ProjectGradingInterface } from "./ProjectGradingInterface";
 
 interface Course {
   id: string;
@@ -21,11 +22,14 @@ interface Submission {
   description: string;
   link: string;
   submitted_at: string;
+  grade: number | null;
+  feedback: string | null;
+  review_status: string | null;
   student: {
     name: string;
     email: string;
   };
-  course: {
+  courses: {
     title: string;
   };
 }
@@ -41,7 +45,7 @@ export function TutorDashboard() {
   useEffect(() => {
     fetchData();
 
-    // Real-time updates for lessons and submissions
+    // Real-time updates for lessons, submissions, and project updates
     const changesChannel = supabase
       .channel('tutor-dashboard-changes')
       .on(
@@ -94,10 +98,13 @@ export function TutorDashboard() {
           description,
           link,
           submitted_at,
+          grade,
+          feedback,
+          review_status,
           student_id,
           course_id,
           student:users!projects_student_id_fkey(name, email),
-          course:courses!projects_course_id_fkey(title)
+          courses:courses!projects_course_id_fkey(title)
         `)
         .order('submitted_at', { ascending: false });
 
@@ -213,63 +220,10 @@ export function TutorDashboard() {
       </Card>
 
       {/* Student Submissions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Student Submissions</CardTitle>
-          <CardDescription>Review and grade student projects</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {submissions.length === 0 ? (
-            <div className="text-center py-8">
-              <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">No submissions yet</h3>
-              <p className="text-muted-foreground">
-                Student project submissions will appear here
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {submissions.map((submission) => (
-                <div key={submission.id} className="p-4 border rounded-lg">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-medium">{submission.title}</h4>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {submission.description}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Student: {submission.student?.name}</span>
-                        <span>Course: {submission.course?.title}</span>
-                        <span>
-                          Submitted: {new Date(submission.submitted_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      {submission.link && (
-                        <a 
-                          href={submission.link} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline text-sm mt-2 inline-block"
-                        >
-                          View Project
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
-                        Review
-                      </Button>
-                      <Button size="sm">
-                        Grade
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ProjectGradingInterface 
+        projects={submissions}
+        onUpdate={fetchData}
+      />
     </div>
   );
 }

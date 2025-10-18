@@ -17,6 +17,7 @@ import { BulkUserRegistration } from "./BulkUserRegistration";
 import { SuspendUserDialog } from "./SuspendUserDialog";
 import { AdminOnly, UltimateTutorAndAbove } from "./RoleBasedAccess";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProjectGradingInterface } from "./ProjectGradingInterface";
 interface Course {
   id: string;
   title: string;
@@ -49,10 +50,32 @@ export function AdminDashboard() {
   const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
+
+    // Real-time updates for projects
+    const projectsChannel = supabase
+      .channel('admin-projects-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects'
+        },
+        () => {
+          console.log('Project updated - refreshing data');
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(projectsChannel);
+    };
   }, []);
 
   const fetchData = async () => {
@@ -71,8 +94,30 @@ export function AdminDashboard() {
 
       if (usersError) throw usersError;
 
+      // Fetch all project submissions
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          title,
+          description,
+          link,
+          submitted_at,
+          grade,
+          feedback,
+          review_status,
+          student_id,
+          course_id,
+          student:users!projects_student_id_fkey(name, email),
+          courses:courses!projects_course_id_fkey(title)
+        `)
+        .order('submitted_at', { ascending: false });
+
+      if (projectsError) throw projectsError;
+
       setCourses(coursesData || []);
       setUsers(usersData || []);
+      setProjects(projectsData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -480,6 +525,12 @@ export function AdminDashboard() {
 
       {/* Password Reset Management */}
       <PasswordReset users={users} onPasswordReset={fetchData} />
+
+      {/* Project Submissions Grading */}
+      <ProjectGradingInterface 
+        projects={projects}
+        onUpdate={fetchData}
+      />
     </div>
   );
 }

@@ -27,14 +27,36 @@ export function ProjectSubmission({ courseId }: Props) {
         if (upErr) throw upErr;
         file_path = path;
       }
-      const { error } = await supabase.from('projects').insert({
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data: project, error } = await supabase.from('projects').insert({
         course_id: courseId,
         title: title || 'Project submission',
         description: description || null,
         link: link || null,
         file_path,
-      });
+      }).select().single();
+
       if (error) throw error;
+
+      // Notify admins and tutors
+      try {
+        await supabase.functions.invoke('notify-project-submission', {
+          body: {
+            projectId: project.id,
+            courseId: courseId,
+            studentId: user.id,
+            projectTitle: title || 'Project submission',
+          }
+        });
+      } catch (notifError) {
+        console.error('Failed to send notifications:', notifError);
+        // Don't fail the submission if notifications fail
+      }
+
       toast({ title: '🚀 Project Submitted!', description: 'Your awesome work has been sent to your tutor!' });
       setTitle(""); setDescription(""); setLink(""); setFile(null);
     } catch (e: any) {
