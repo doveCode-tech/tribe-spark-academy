@@ -40,6 +40,39 @@ export function TutorDashboard() {
 
   useEffect(() => {
     fetchData();
+
+    // Real-time updates for lessons and submissions
+    const changesChannel = supabase
+      .channel('tutor-dashboard-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lessons'
+        },
+        () => {
+          console.log('Lesson updated - refreshing courses');
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects'
+        },
+        () => {
+          console.log('Project updated - refreshing submissions');
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(changesChannel);
+    };
   }, []);
 
   const fetchData = async () => {

@@ -26,7 +26,7 @@ export function StudentDashboard() {
       fetchPortfolioProjects();
     }
 
-    // Real-time updates for enrollments, badges, and projects
+    // Real-time updates for enrollments, badges, projects, and lessons
     const changesChannel = supabase
       .channel('student-dashboard-changes')
       .on(
@@ -58,6 +58,18 @@ export function StudentDashboard() {
           filter: `student_id=eq.${userProfile?.auth_user_id}`
         },
         () => fetchPortfolioProjects()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lessons'
+        },
+        () => {
+          console.log('Lesson updated - refreshing enrolled courses');
+          fetchEnrolledCourses();
+        }
       )
       .subscribe();
 
