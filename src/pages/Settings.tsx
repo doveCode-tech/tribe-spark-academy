@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminAssetSettings } from "@/components/AdminAssetSettings";
+import { BadgeManagement } from "@/components/BadgeManagement";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -28,7 +29,12 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        {isAdmin && <AdminAssetSettings />}
+        {isAdmin && (
+          <>
+            <AdminAssetSettings />
+            <BadgeManagement />
+          </>
+        )}
       </div>
     </LMSLayout>
   );

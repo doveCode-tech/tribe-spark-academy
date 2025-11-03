@@ -981,7 +981,7 @@ export type Database = {
         Returns: undefined
       }
       admin_list_users: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           approved: boolean
           auth_user_id: string | null
@@ -1006,6 +1006,12 @@ export type Database = {
           suspended: boolean | null
           username: string | null
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "users"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       admin_reject_enrollment_request: {
         Args: { _reason?: string; _request_id: string }
@@ -1044,7 +1050,7 @@ export type Database = {
         Returns: string
       }
       get_unresolved_enrollment_notifications: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           created_at: string
           data: Json
@@ -1058,14 +1064,8 @@ export type Database = {
           type: string
         }[]
       }
-      is_admin: {
-        Args: { user_id: string }
-        Returns: boolean
-      }
-      is_tutor_or_admin: {
-        Args: { user_id: string }
-        Returns: boolean
-      }
+      is_admin: { Args: { user_id: string }; Returns: boolean }
+      is_tutor_or_admin: { Args: { user_id: string }; Returns: boolean }
       is_ultimate_tutor_or_admin: {
         Args: { user_id: string }
         Returns: boolean

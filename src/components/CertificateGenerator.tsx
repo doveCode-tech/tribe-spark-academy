@@ -1,7 +1,8 @@
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Award, Calendar, User } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CertificateData {
   id: string;
@@ -18,6 +19,30 @@ interface CertificateGeneratorProps {
 
 export const CertificateGenerator = forwardRef<HTMLDivElement, CertificateGeneratorProps>(
   ({ certificate, className = "" }, ref) => {
+    const [logoUrl, setLogoUrl] = useState<string>("");
+    const [signatureUrl, setSignatureUrl] = useState<string>("");
+
+    useEffect(() => {
+      const loadAssets = async () => {
+        const { data } = await supabase
+          .from("admin_settings")
+          .select("setting_key, setting_value")
+          .in("setting_key", ["founder_signature_url", "company_logo_url"]);
+
+        if (data) {
+          data.forEach((setting) => {
+            const value = setting.setting_value as any;
+            if (setting.setting_key === "company_logo_url" && value?.url) {
+              setLogoUrl(value.url);
+            } else if (setting.setting_key === "founder_signature_url" && value?.url) {
+              setSignatureUrl(value.url);
+            }
+          });
+        }
+      };
+      loadAssets();
+    }, []);
+
     return (
       <div 
         ref={ref}
@@ -35,9 +60,13 @@ export const CertificateGenerator = forwardRef<HTMLDivElement, CertificateGenera
           {/* Header */}
           <div className="text-center mb-8 relative z-10">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center">
-                <Award className="w-8 h-8 text-primary-foreground" />
-              </div>
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="w-20 h-20 object-contain" />
+              ) : (
+                <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center">
+                  <Award className="w-8 h-8 text-primary-foreground" />
+                </div>
+              )}
             </div>
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
               Certificate of Completion
@@ -81,10 +110,17 @@ export const CertificateGenerator = forwardRef<HTMLDivElement, CertificateGenera
 
               <div className="text-right">
                 <div className="text-sm text-muted-foreground mb-2">Authorized by</div>
-                <div className="text-lg font-semibold border-b border-muted pb-1">
+                {signatureUrl ? (
+                  <img src={signatureUrl} alt="Signature" className="h-12 mb-1 ml-auto" />
+                ) : (
+                  <div className="text-lg font-semibold border-b border-muted pb-1">
+                    {certificate.founder_name}
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
                   {certificate.founder_name}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">STEMTribe Founder</div>
+                <div className="text-xs text-muted-foreground">STEMTribe Founder</div>
               </div>
             </div>
 
