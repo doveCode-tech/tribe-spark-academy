@@ -116,6 +116,9 @@ export function ReportManagement() {
     content: '',
     grade: '',
   });
+  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
+  const [existingReport, setExistingReport] = useState<Report | null>(null);
+  const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin';
   const isUltimateTutor = userProfile?.role === 'ultimate_tutor';
@@ -257,12 +260,90 @@ export function ReportManagement() {
     }
   };
 
+  const loadEnrolledCourses = async (studentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select('course_id, courses(id, title)')
+        .eq('student_id', studentId)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      const enrolled = (data || [])
+        .map(enrollment => enrollment.courses)
+        .filter(Boolean) as Course[];
+      
+      setEnrolledCourses(enrolled);
+    } catch (error) {
+      console.error('Error loading enrolled courses:', error);
+    }
+  };
+
+  const checkForDuplicateReport = async (studentId: string, courseId: string) => {
+    if (courseId === 'none') {
+      setExistingReport(null);
+      return;
+    }
+
+    setDuplicateCheckLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('course_id', courseId)
+        .eq('tutor_id', userProfile?.auth_user_id)
+        .in('status', ['pending_review', 'approved'])
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        const studentData = students.find(s => s.auth_user_id === studentId);
+        const courseData = enrolledCourses.find(c => c.id === courseId);
+        setExistingReport({
+          ...data,
+          status: data.status as 'draft' | 'submitted' | 'approved' | 'rejected',
+          student_name: studentData?.name || studentData?.email || 'Unknown',
+          course_title: courseData?.title || 'Unknown Course',
+          attachments: data.attachments as Array<{ name: string; path: string }> | undefined
+        });
+      } else {
+        setExistingReport(null);
+      }
+    } catch (error) {
+      console.error('Error checking for duplicate report:', error);
+      setExistingReport(null);
+    } finally {
+      setDuplicateCheckLoading(false);
+    }
+  };
+
   const createReport = async () => {
     try {
       if (!newReport.title || !newReport.content || !newReport.student_id) {
         toast({
           title: "Validation Error",
           description: "Please select a student and fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (newReport.course_id === 'none') {
+        toast({
+          title: "Course Required",
+          description: "Please select a course for this report.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (existingReport) {
+        toast({
+          title: "Duplicate Report",
+          description: "An active report already exists for this student and course. Please edit the existing report or select a different course.",
           variant: "destructive",
         });
         return;
@@ -364,6 +445,24 @@ export function ReportManagement() {
         toast({
           title: "Validation Error",
           description: "Please select a student and fill in title and content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (newReport.course_id === 'none') {
+        toast({
+          title: "Course Required",
+          description: "Please select a course for this report.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (existingReport) {
+        toast({
+          title: "Duplicate Report",
+          description: "An active report already exists for this student and course. Please edit the existing report or select a different course.",
           variant: "destructive",
         });
         return;
@@ -1024,7 +1123,12 @@ export function ReportManagement() {
                   <Label htmlFor="student">Student *</Label>
                   <Select
                     value={newReport.student_id}
-                    onValueChange={(value) => setNewReport(prev => ({ ...prev, student_id: value }))}
+                    onValueChange={(value) => {
+                      setNewReport(prev => ({ ...prev, student_id: value, course_id: 'none' }));
+                      setEnrolledCourses([]);
+                      setExistingReport(null);
+                      loadEnrolledCourses(value);
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select student" />
@@ -1043,24 +1147,93 @@ export function ReportManagement() {
                 </div>
 
                 <div>
-                  <Label htmlFor="course">Course (Optional)</Label>
+                  <Label htmlFor="course">Course *</Label>
                   <Select
                     value={newReport.course_id}
-                    onValueChange={(value) => setNewReport(prev => ({ ...prev, course_id: value }))}
+                    onValueChange={(value) => {
+                      setNewReport(prev => ({ ...prev, course_id: value }));
+                      if (newReport.student_id && value !== 'none') {
+                        checkForDuplicateReport(newReport.student_id, value);
+                      } else {
+                        setExistingReport(null);
+                      }
+                    }}
+                    disabled={!newReport.student_id || enrolledCourses.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select course" />
+                      <SelectValue placeholder={
+                        !newReport.student_id 
+                          ? "Select student first"
+                          : enrolledCourses.length === 0
+                          ? "Student not enrolled in any courses"
+                          : "Select course"
+                      } />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No specific course</SelectItem>
-                      {courses.map((course) => (
+                      <SelectItem value="none" disabled>Select a course</SelectItem>
+                      {enrolledCourses.map((course) => (
                         <SelectItem key={course.id} value={course.id}>
                           {course.title}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {newReport.student_id && enrolledCourses.length === 0 && (
+                    <p className="text-sm text-amber-600 mt-1">
+                      This student is not enrolled in any courses. Please enroll them first.
+                    </p>
+                  )}
                 </div>
+
+                {duplicateCheckLoading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    Checking for existing reports...
+                  </div>
+                )}
+
+                {existingReport && (
+                  <div className="p-4 border border-amber-200 bg-amber-50 rounded-lg space-y-2">
+                    <div className="flex items-start gap-2">
+                      <div className="text-amber-600 mt-0.5">⚠️</div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-amber-900">Active Report Already Exists</p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          You have an active {existingReport.status} report for this student and course: "{existingReport.title}"
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingReport(existingReport);
+                              setEditedContent({
+                                title: existingReport.title,
+                                content: existingReport.content,
+                                grade: existingReport.grade?.toString() || '',
+                              });
+                              setIsEditDialogOpen(true);
+                              setIsReportDialogOpen(false);
+                            }}
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Edit Existing Report
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setNewReport(prev => ({ ...prev, course_id: 'none' }));
+                              setExistingReport(null);
+                            }}
+                          >
+                            Select Different Course
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="title">Report Title *</Label>

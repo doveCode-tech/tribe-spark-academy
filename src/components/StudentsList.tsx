@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, FileText, Upload, X, Save, Mail, Award } from "lucide-react";
+import { Search, FileText, Upload, X, Save, Mail, Award, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +68,9 @@ export function StudentsList() {
   const [isSaving, setIsSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
+  const [existingReport, setExistingReport] = useState<any>(null);
+  const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
 
   const isTutor = userProfile?.role === 'tutor' || userProfile?.role === 'ultimate_tutor';
   const isAdmin = userProfile?.role === 'admin';
@@ -244,6 +247,54 @@ export function StudentsList() {
     }
   };
 
+  const loadEnrolledCourses = async (studentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select('course_id, courses(id, title)')
+        .eq('student_id', studentId)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      const enrolled = (data || [])
+        .map(enrollment => enrollment.courses)
+        .filter(Boolean) as Course[];
+      
+      setEnrolledCourses(enrolled);
+    } catch (error) {
+      console.error('Error loading enrolled courses:', error);
+    }
+  };
+
+  const checkForDuplicateReport = async (studentId: string, courseId: string) => {
+    if (courseId === 'none') {
+      setExistingReport(null);
+      return;
+    }
+
+    setDuplicateCheckLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('course_id', courseId)
+        .eq('tutor_id', userProfile?.auth_user_id)
+        .in('status', ['pending_review', 'approved'])
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setExistingReport(data || null);
+    } catch (error) {
+      console.error('Error checking for duplicate report:', error);
+      setExistingReport(null);
+    } finally {
+      setDuplicateCheckLoading(false);
+    }
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
@@ -302,6 +353,24 @@ export function StudentsList() {
         return;
       }
 
+      if (reportForm.course_id === 'none') {
+        toast({
+          title: "Course Required",
+          description: "Please select a course for this report.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (existingReport) {
+        toast({
+          title: "Duplicate Report",
+          description: "An active report already exists for this student and course.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       setIsSaving(true);
 
       // Upload attachments if any
@@ -350,6 +419,8 @@ export function StudentsList() {
       setAttachments([]);
       setUploadedAttachments([]);
       setSelectedStudent(null);
+      setEnrolledCourses([]);
+      setExistingReport(null);
       setDialogOpen(false);
     } catch (error: any) {
       console.error('Error saving report:', error);
@@ -453,11 +524,16 @@ export function StudentsList() {
                 <div className="flex gap-2">
                   {isTutor && (
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                      <DialogTrigger asChild>
+                       <DialogTrigger asChild>
                         <Button
                           size="sm"
                           onClick={() => {
                             setSelectedStudent(student);
+                            setReportForm({ title: '', content: '', course_id: 'none', grade: '' });
+                            setEnrolledCourses([]);
+                            setExistingReport(null);
+                            setAttachments([]);
+                            loadEnrolledCourses(student.auth_user_id);
                             setDialogOpen(true);
                           }}
                         >
@@ -470,27 +546,87 @@ export function StudentsList() {
                         <DialogTitle>Create Report for {getStudentDisplayName(student)}</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="course">Course (Optional)</Label>
-                            <Select
-                              value={reportForm.course_id}
-                              onValueChange={(value) => setReportForm(prev => ({ ...prev, course_id: value }))}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select course" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">No specific course</SelectItem>
-                                {courses.map((course) => (
-                                  <SelectItem key={course.id} value={course.id}>
-                                    {course.title}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                        <div>
+                          <Label htmlFor="course">Course *</Label>
+                          <Select
+                            value={reportForm.course_id}
+                            onValueChange={(value) => {
+                              setReportForm(prev => ({ ...prev, course_id: value }));
+                              if (selectedStudent && value !== 'none') {
+                                checkForDuplicateReport(selectedStudent.auth_user_id, value);
+                              } else {
+                                setExistingReport(null);
+                              }
+                            }}
+                            disabled={enrolledCourses.length === 0}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={
+                                enrolledCourses.length === 0
+                                  ? "Student not enrolled in any courses"
+                                  : "Select course"
+                              } />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none" disabled>Select a course</SelectItem>
+                              {enrolledCourses.map((course) => (
+                                <SelectItem key={course.id} value={course.id}>
+                                  {course.title}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {enrolledCourses.length === 0 && (
+                            <p className="text-sm text-amber-600 mt-1">
+                              This student is not enrolled in any courses. Please enroll them first.
+                            </p>
+                          )}
+                        </div>
 
+                        {duplicateCheckLoading && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                            Checking for existing reports...
+                          </div>
+                        )}
+
+                        {existingReport && (
+                          <div className="p-4 border border-amber-200 bg-amber-50 rounded-lg space-y-2">
+                            <div className="flex items-start gap-2">
+                              <div className="text-amber-600 mt-0.5">⚠️</div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-amber-900">Active Report Already Exists</p>
+                                <p className="text-sm text-amber-700 mt-1">
+                                  You have an active {existingReport.status} report for this student and course: "{existingReport.title}"
+                                </p>
+                                <div className="flex gap-2 mt-3">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      navigate('/reports');
+                                    }}
+                                  >
+                                    <Edit className="w-3 h-3 mr-1" />
+                                    View in Reports Page
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setReportForm(prev => ({ ...prev, course_id: 'none' }));
+                                      setExistingReport(null);
+                                    }}
+                                  >
+                                    Select Different Course
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="grade">Grade (Optional)</Label>
                             <Input
