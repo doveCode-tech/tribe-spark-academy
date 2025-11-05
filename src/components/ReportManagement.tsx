@@ -40,7 +40,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { FileText, Send, Check, X, Eye, Plus, Download, Edit, Filter, Calendar as CalendarIcon, ChevronDown } from "lucide-react";
+import { FileText, Send, Check, X, Eye, Plus, Download, Edit, Filter, Calendar as CalendarIcon, ChevronDown, Sparkles } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -119,6 +119,12 @@ export function ReportManagement() {
   const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
   const [existingReport, setExistingReport] = useState<Report | null>(null);
   const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
+  const [isFormattingReport, setIsFormattingReport] = useState(false);
+  const [formattedPreview, setFormattedPreview] = useState<{
+    html: string;
+    text: string;
+  } | null>(null);
+  const [showFormatPreview, setShowFormatPreview] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin';
   const isUltimateTutor = userProfile?.role === 'ultimate_tutor';
@@ -1023,6 +1029,84 @@ export function ReportManagement() {
     }
   };
 
+  const formatReport = async (title: string, content: string, grade?: string) => {
+    try {
+      setIsFormattingReport(true);
+      
+      const { data, error } = await supabase.functions.invoke('format-report', {
+        body: {
+          reportTitle: title,
+          reportContent: content,
+          reportGrade: grade ? parseInt(grade) : null,
+        }
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to format report');
+      }
+
+      setFormattedPreview({
+        html: data.formatted_html,
+        text: data.formatted_text,
+      });
+      setShowFormatPreview(true);
+
+      // Log formatting action
+      await supabase.from('audit_logs').insert({
+        action_type: 'report_formatted',
+        performed_by: userProfile?.auth_user_id,
+        target_type: 'report',
+        status: 'success',
+        details: {
+          report_title: title,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      toast({
+        title: "Report Formatted",
+        description: "Review the formatted version and apply if satisfied.",
+      });
+    } catch (error: any) {
+      console.error('Error formatting report:', error);
+      toast({
+        title: "Formatting Failed",
+        description: error.message || "Failed to format report. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFormattingReport(false);
+    }
+  };
+
+  const applyFormattedReport = () => {
+    if (!formattedPreview) return;
+    
+    if (newReport.content) {
+      // Apply to new report dialog
+      setNewReport(prev => ({
+        ...prev,
+        content: formattedPreview.text
+      }));
+    } else if (editedContent.content) {
+      // Apply to edit dialog
+      setEditedContent(prev => ({
+        ...prev,
+        content: formattedPreview.text
+      }));
+    }
+
+    setShowFormatPreview(false);
+    setFormattedPreview(null);
+
+    toast({
+      title: "Formatting Applied",
+      description: "The formatted version has been applied to your report.",
+    });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-muted text-muted-foreground';
@@ -1246,7 +1330,19 @@ export function ReportManagement() {
                 </div>
 
                 <div>
-                  <Label htmlFor="content">Report Content *</Label>
+                  <div className="flex justify-between items-center mb-2">
+                    <Label htmlFor="content">Report Content *</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => formatReport(newReport.title, newReport.content, newReport.grade)}
+                      disabled={!newReport.title || !newReport.content || isFormattingReport}
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      {isFormattingReport ? 'Formatting...' : 'Format Report'}
+                    </Button>
+                  </div>
                   <Textarea
                     id="content"
                     value={newReport.content}
@@ -1314,6 +1410,54 @@ export function ReportManagement() {
           )}
         </div>
       </div>
+
+      {/* Format Preview Dialog */}
+      <Dialog open={showFormatPreview} onOpenChange={setShowFormatPreview}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Formatted Report Preview</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
+            {/* Original */}
+            <div className="space-y-2 flex flex-col h-full">
+              <h3 className="font-semibold text-sm text-muted-foreground">Original</h3>
+              <div className="flex-1 border rounded-lg p-4 overflow-y-auto bg-muted/30">
+                <pre className="whitespace-pre-wrap text-sm font-mono">
+                  {newReport.content || editedContent.content}
+                </pre>
+              </div>
+            </div>
+
+            {/* Formatted Preview */}
+            <div className="space-y-2 flex flex-col h-full">
+              <h3 className="font-semibold text-sm text-muted-foreground">Formatted</h3>
+              <div className="flex-1 border rounded-lg p-4 overflow-y-auto bg-background">
+                {formattedPreview && (
+                  <div 
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: formattedPreview.html }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowFormatPreview(false);
+                setFormattedPreview(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={applyFormattedReport}>
+              <Check className="w-4 h-4 mr-2" />
+              Apply Formatted Version
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Filters Section */}
       {canReview && (
@@ -1783,7 +1927,19 @@ export function ReportManagement() {
               </div>
 
               <div>
-                <Label htmlFor="edit-content">Report Content *</Label>
+                <div className="flex justify-between items-center mb-2">
+                  <Label htmlFor="edit-content">Report Content *</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => formatReport(editedContent.title, editedContent.content, editedContent.grade)}
+                    disabled={!editedContent.title || !editedContent.content || isFormattingReport}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    {isFormattingReport ? 'Formatting...' : 'Format Report'}
+                  </Button>
+                </div>
                 <Textarea
                   id="edit-content"
                   value={editedContent.content}
@@ -1862,7 +2018,19 @@ export function ReportManagement() {
               </div>
 
               <div>
-                <Label htmlFor="draft-content">Report Content *</Label>
+                <div className="flex justify-between items-center mb-2">
+                  <Label htmlFor="draft-content">Report Content *</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => formatReport(editedContent.title, editedContent.content, editedContent.grade)}
+                    disabled={!editedContent.title || !editedContent.content || isFormattingReport}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    {isFormattingReport ? 'Formatting...' : 'Format Report'}
+                  </Button>
+                </div>
                 <Textarea
                   id="draft-content"
                   value={editedContent.content}
