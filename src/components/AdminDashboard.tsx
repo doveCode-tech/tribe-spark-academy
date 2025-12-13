@@ -18,6 +18,8 @@ import { SuspendUserDialog } from "./SuspendUserDialog";
 import { AdminOnly, UltimateTutorAndAbove } from "./RoleBasedAccess";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProjectGradingInterface } from "./ProjectGradingInterface";
+import { AdminLessonsList } from "./AdminLessonsList";
+
 interface Course {
   id: string;
   title: string;
@@ -365,33 +367,13 @@ export function AdminDashboard() {
           ) : (
             <div className="grid gap-4">
               {courses.map((course) => (
-                <div key={course.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <h4 className="font-medium">{course.title}</h4>
-                    <p className="text-sm text-muted-foreground">{course.description}</p>
-                    <Badge variant="secondary" className="mt-1">
-                      {course.category}
-                    </Badge>
-                  </div>
-                  <div className="flex gap-2">
-                    <TutorAssignDialog courseId={course.id} users={users} onChange={fetchData} />
-                    <CodeTemplateEditor courseId={course.id} category={course.category} />
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => window.open(`/lessons/${course.id}`, '_blank')}
-                    >
-                      Lessons
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteCourse(course.id)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
+                <CourseCardWithLessons 
+                  key={course.id}
+                  course={course}
+                  users={users}
+                  onDelete={() => deleteCourse(course.id)}
+                  onRefresh={fetchData}
+                />
               ))}
             </div>
           )}
@@ -530,6 +512,54 @@ export function AdminDashboard() {
       <ProjectGradingInterface 
         projects={projects}
         onUpdate={fetchData}
+      />
+    </div>
+  );
+}
+
+// Course Card with inline lessons
+function CourseCardWithLessons({ 
+  course, 
+  users, 
+  onDelete, 
+  onRefresh 
+}: { 
+  course: Course; 
+  users: User[]; 
+  onDelete: () => void; 
+  onRefresh: () => void;
+}) {
+  const [lessonsExpanded, setLessonsExpanded] = useState(false);
+
+  return (
+    <div className="p-4 border rounded-lg space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h4 className="font-medium">{course.title}</h4>
+          <p className="text-sm text-muted-foreground">{course.description}</p>
+          <Badge variant="secondary" className="mt-1">
+            {course.category}
+          </Badge>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <TutorAssignDialog courseId={course.id} users={users} onChange={onRefresh} />
+          <CodeTemplateEditor courseId={course.id} category={course.category} />
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onDelete}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+      
+      <AdminLessonsList 
+        courseId={course.id}
+        courseTitle={course.title}
+        category={course.category}
+        isExpanded={lessonsExpanded}
+        onToggle={() => setLessonsExpanded(!lessonsExpanded)}
       />
     </div>
   );
