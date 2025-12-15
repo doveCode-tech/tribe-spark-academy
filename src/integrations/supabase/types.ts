@@ -489,6 +489,7 @@ export type Database = {
           duration_minutes: number | null
           exercises: Json | null
           id: string
+          instructions: string | null
           is_end_of_course: boolean | null
           order_index: number
           quiz_data: Json | null
@@ -497,6 +498,7 @@ export type Database = {
           updated_at: string
           video_url: string | null
           video_urls: string[] | null
+          youtube_urls: string[] | null
         }
         Insert: {
           assignment_data?: Json | null
@@ -509,6 +511,7 @@ export type Database = {
           duration_minutes?: number | null
           exercises?: Json | null
           id?: string
+          instructions?: string | null
           is_end_of_course?: boolean | null
           order_index?: number
           quiz_data?: Json | null
@@ -517,6 +520,7 @@ export type Database = {
           updated_at?: string
           video_url?: string | null
           video_urls?: string[] | null
+          youtube_urls?: string[] | null
         }
         Update: {
           assignment_data?: Json | null
@@ -529,6 +533,7 @@ export type Database = {
           duration_minutes?: number | null
           exercises?: Json | null
           id?: string
+          instructions?: string | null
           is_end_of_course?: boolean | null
           order_index?: number
           quiz_data?: Json | null
@@ -537,6 +542,7 @@ export type Database = {
           updated_at?: string
           video_url?: string | null
           video_urls?: string[] | null
+          youtube_urls?: string[] | null
         }
         Relationships: [
           {

@@ -84,7 +84,13 @@ export function LessonManager({ courseId, category }: LessonManagerProps) {
         .order('order_index');
 
       if (error) throw error;
-      setLessons((data || []) as Lesson[]);
+      // Map data with defaults for new fields
+      const mappedLessons = (data || []).map(lesson => ({
+        ...lesson,
+        instructions: lesson.instructions || '',
+        youtube_urls: lesson.youtube_urls || [],
+      })) as Lesson[];
+      setLessons(mappedLessons);
     } catch (error) {
       console.error('Error fetching lessons:', error);
       toast({
@@ -541,12 +547,14 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [uploadedVideos, setUploadedVideos] = useState<string[]>(lesson?.video_urls || []);
+  const [youtubeUrls, setYoutubeUrls] = useState<string[]>(lesson?.youtube_urls || []);
+  const [newYoutubeUrl, setNewYoutubeUrl] = useState('');
   const [formData, setFormData] = useState({
     title: lesson?.title || '',
     description: lesson?.description || '',
     content: lesson?.content || '',
+    instructions: lesson?.instructions || '',
     duration_minutes: lesson?.duration_minutes || 30,
-    video_urls: lesson?.video_urls?.join('\n') || '',
     assignment_required: lesson?.assignment_required || false,
     quiz_required: lesson?.quiz_required || false,
     is_end_of_course: lesson?.is_end_of_course || false,
@@ -602,17 +610,33 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
     setUploadedVideos(newVideos);
   };
 
-  const handleSave = () => {
-    // Combine uploaded videos and manually entered URLs
-    const manualUrls = formData.video_urls.split('\n').filter(url => url.trim());
-    const allVideoUrls = [...uploadedVideos, ...manualUrls];
+  const addYoutubeUrl = () => {
+    const url = newYoutubeUrl.trim();
+    if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+      setYoutubeUrls([...youtubeUrls, url]);
+      setNewYoutubeUrl('');
+    } else if (url) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube URL.",
+        variant: "destructive",
+      });
+    }
+  };
 
+  const removeYoutubeUrl = (index: number) => {
+    setYoutubeUrls(youtubeUrls.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
     onSave({
       title: formData.title,
       description: formData.description,
       content: formData.content,
+      instructions: formData.instructions,
       duration_minutes: formData.duration_minutes,
-      video_urls: allVideoUrls,
+      video_urls: uploadedVideos,
+      youtube_urls: youtubeUrls,
       assignment_required: formData.assignment_required,
       quiz_required: formData.quiz_required,
       is_end_of_course: formData.is_end_of_course,
@@ -681,17 +705,46 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
 
         <Separator />
 
-        {/* Video Management */}
+        {/* Instructions Section */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold">Videos</h3>
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            Instructions
+          </h3>
+          <div>
+            <Label htmlFor="instructions">Lesson Instructions</Label>
+            <Textarea
+              id="instructions"
+              value={formData.instructions}
+              onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
+              placeholder="Step-by-step instructions for students to follow during this lesson..."
+              rows={5}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Provide clear instructions for students to complete this lesson
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Device Video Upload Section */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <HardDrive className="w-4 h-4" />
+            Upload Training Videos from Device
+          </h3>
           
           {/* Uploaded Videos Display */}
           {uploadedVideos.length > 0 && (
             <div className="space-y-2">
-              <Label>Uploaded Videos</Label>
+              <Label>Uploaded Videos ({uploadedVideos.length})</Label>
               {uploadedVideos.map((url, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
-                  <span className="text-sm truncate flex-1">{url}</span>
+                <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Video className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-sm truncate">{url.split('/').pop()}</span>
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
@@ -705,39 +758,80 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
             </div>
           )}
 
-          {/* Video Upload */}
-          <div>
-            <Label htmlFor="video-upload">Upload Videos</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="video-upload"
-                type="file"
-                accept="video/*"
-                multiple
-                onChange={handleVideoUpload}
-                disabled={uploading}
-              />
-              {uploading && <span className="text-sm text-muted-foreground">Uploading...</span>}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload video files from your computer (MP4, MOV, etc.)
-            </p>
-          </div>
-
-          {/* Video URLs */}
-          <div>
-            <Label htmlFor="videos">Or Add Video URLs (one per line)</Label>
-            <Textarea
-              id="videos"
-              value={formData.video_urls}
-              onChange={(e) => setFormData({ ...formData, video_urls: e.target.value })}
-              placeholder="https://youtube.com/watch?v=...&#10;https://vimeo.com/..."
-              rows={3}
+          {/* Video Upload Input */}
+          <div className="border-2 border-dashed rounded-lg p-4">
+            <Label htmlFor="video-upload" className="cursor-pointer">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <Upload className="w-8 h-8 text-muted-foreground" />
+                <span className="text-sm font-medium">Click to upload videos</span>
+                <span className="text-xs text-muted-foreground">MP4, MOV, WebM (Max 500MB)</span>
+              </div>
+            </Label>
+            <Input
+              id="video-upload"
+              type="file"
+              accept="video/*"
+              multiple
+              onChange={handleVideoUpload}
+              disabled={uploading}
+              className="hidden"
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Add YouTube, Vimeo, or direct video links
-            </p>
+            {uploading && (
+              <div className="mt-2 text-center text-sm text-muted-foreground">
+                Uploading...
+              </div>
+            )}
           </div>
+        </div>
+
+        <Separator />
+
+        {/* YouTube Links Section */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Youtube className="w-4 h-4 text-red-500" />
+            YouTube Tutorial Links
+          </h3>
+          
+          {/* Added YouTube URLs Display */}
+          {youtubeUrls.length > 0 && (
+            <div className="space-y-2">
+              <Label>Added YouTube Videos ({youtubeUrls.length})</Label>
+              {youtubeUrls.map((url, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Youtube className="w-4 h-4 text-red-500 shrink-0" />
+                    <span className="text-sm truncate">{url}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeYoutubeUrl(index)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add YouTube URL Input */}
+          <div className="flex gap-2">
+            <Input
+              value={newYoutubeUrl}
+              onChange={(e) => setNewYoutubeUrl(e.target.value)}
+              placeholder="https://youtube.com/watch?v=..."
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addYoutubeUrl())}
+            />
+            <Button type="button" onClick={addYoutubeUrl} variant="outline">
+              <Plus className="w-4 h-4 mr-1" />
+              Add
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Add YouTube tutorial links for students to watch
+          </p>
         </div>
 
         <Separator />
