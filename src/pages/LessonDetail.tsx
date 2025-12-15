@@ -22,6 +22,31 @@ export default function LessonDetail() {
     }
   }, [lessonId, userProfile]);
 
+  // Real-time subscription for lesson updates
+  useEffect(() => {
+    if (!lessonId) return;
+
+    const channel = supabase
+      .channel(`lesson-${lessonId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'lessons',
+          filter: `id=eq.${lessonId}`
+        },
+        (payload) => {
+          setLesson(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [lessonId]);
+
   const fetchLesson = async () => {
     try {
       const { data, error } = await supabase
