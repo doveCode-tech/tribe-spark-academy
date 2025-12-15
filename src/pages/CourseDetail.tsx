@@ -48,6 +48,31 @@ export default function CourseDetail() {
     }
   }, [courseId, user]);
 
+  // Real-time subscription for lesson updates
+  useEffect(() => {
+    if (!courseId) return;
+
+    const channel = supabase
+      .channel(`lessons-${courseId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lessons',
+          filter: `course_id=eq.${courseId}`
+        },
+        () => {
+          fetchCourseData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [courseId, user]);
+
   const fetchCourseData = async () => {
     try {
       // Check if user is enrolled in this course
