@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Video, BookOpen, FileText, Upload, CheckCircle } from "lucide-react";
+import { Video, BookOpen, FileText, Upload, CheckCircle, ClipboardList } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,8 @@ interface LessonContentViewerProps {
     description: string;
     content: string;
     video_urls: string[] | null;
+    youtube_urls: string[] | null;
+    instructions: string | null;
     exercises: any;
     course_id: string;
   };
@@ -106,10 +108,14 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="video" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="video">
               <Video className="w-4 h-4 mr-2" />
-              Lesson Videos
+              Videos
+            </TabsTrigger>
+            <TabsTrigger value="instructions">
+              <ClipboardList className="w-4 h-4 mr-2" />
+              Instructions
             </TabsTrigger>
             <TabsTrigger value="exercises">
               <BookOpen className="w-4 h-4 mr-2" />
@@ -122,11 +128,26 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
           </TabsList>
 
           <TabsContent value="video" className="space-y-4">
-            {lesson.video_urls && lesson.video_urls.length > 0 ? (
+            {/* Combined video_urls and youtube_urls */}
+            {((lesson.video_urls && lesson.video_urls.length > 0) || (lesson.youtube_urls && lesson.youtube_urls.length > 0)) ? (
               <div className="space-y-4">
-                {lesson.video_urls.map((url, index) => (
-                  <div key={index} className="space-y-2">
+                {/* Uploaded videos */}
+                {lesson.video_urls && lesson.video_urls.map((url, index) => (
+                  <div key={`video-${index}`} className="space-y-2">
                     <h4 className="font-medium">Video {index + 1}</h4>
+                    <div className="aspect-video w-full rounded-lg overflow-hidden bg-muted">
+                      <video
+                        src={url}
+                        className="w-full h-full"
+                        controls
+                      />
+                    </div>
+                  </div>
+                ))}
+                {/* YouTube videos */}
+                {lesson.youtube_urls && lesson.youtube_urls.map((url, index) => (
+                  <div key={`youtube-${index}`} className="space-y-2">
+                    <h4 className="font-medium">YouTube Tutorial {index + 1}</h4>
                     <div className="aspect-video w-full rounded-lg overflow-hidden bg-muted">
                       <iframe
                         src={url.replace('youtu.be/', 'youtube.com/embed/').replace('watch?v=', 'embed/')}
@@ -137,14 +158,41 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
                     </div>
                   </div>
                 ))}
-                <div className="prose prose-sm max-w-none">
-                  <p>{lesson.content}</p>
-                </div>
+                {lesson.content && (
+                  <div className="prose prose-sm max-w-none">
+                    <p>{lesson.content}</p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p>No videos available for this lesson</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="instructions" className="space-y-4">
+            {lesson.instructions ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center">
+                      <ClipboardList className="w-5 h-5 mr-2" />
+                      Lesson Instructions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+                      {lesson.instructions}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <ClipboardList className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No instructions available for this lesson</p>
               </div>
             )}
           </TabsContent>

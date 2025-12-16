@@ -61,6 +61,31 @@ export default function TutorCourseDetail() {
     }
   }, [courseId]);
 
+  // Real-time subscription for lesson updates
+  useEffect(() => {
+    if (!courseId) return;
+
+    const channel = supabase
+      .channel(`tutor-lessons-${courseId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lessons',
+          filter: `course_id=eq.${courseId}`
+        },
+        () => {
+          fetchCourseData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [courseId]);
+
   const fetchCourseData = async () => {
     try {
       // Fetch course details
@@ -259,7 +284,11 @@ export default function TutorCourseDetail() {
             ) : (
               <div className="space-y-4">
                 {lessons.map((lesson, index) => (
-                  <div key={lesson.id} className="p-4 border rounded-lg">
+                  <div 
+                    key={lesson.id} 
+                    className="p-4 border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => navigate(`/lesson/${lesson.id}`)}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -273,6 +302,9 @@ export default function TutorCourseDetail() {
                           </div>
                         </div>
                       </div>
+                      <Button variant="ghost" size="sm">
+                        View Lesson
+                      </Button>
                     </div>
                   </div>
                 ))}
