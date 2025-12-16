@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Video, BookOpen, FileText, Upload, CheckCircle, ClipboardList } from "lucide-react";
+import { Video, BookOpen, FileText, Upload, CheckCircle, ClipboardList, Users } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { LessonSubmissions } from "./LessonSubmissions";
 
 interface LessonContentViewerProps {
   lesson: {
@@ -61,11 +62,12 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
         filePath = fileName;
       }
 
-      // Insert project submission
+      // Insert project submission with lesson_id
       const { error: insertError } = await supabase
         .from('projects')
         .insert({
           course_id: lesson.course_id,
+          lesson_id: lesson.id,
           student_id: userProfile?.auth_user_id,
           title: assignmentTitle,
           description: assignmentDescription,
@@ -100,6 +102,8 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
     }
   };
 
+  const isTutorOrAdmin = userProfile?.role === 'tutor' || userProfile?.role === 'ultimate_tutor' || userProfile?.role === 'admin';
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -108,7 +112,7 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="video" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${isTutorOrAdmin ? 'grid-cols-5' : 'grid-cols-4'}`}>
             <TabsTrigger value="video">
               <Video className="w-4 h-4 mr-2" />
               Videos
@@ -125,6 +129,12 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
               <FileText className="w-4 h-4 mr-2" />
               Assignment
             </TabsTrigger>
+            {isTutorOrAdmin && (
+              <TabsTrigger value="submissions">
+                <Users className="w-4 h-4 mr-2" />
+                Submissions
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="video" className="space-y-4">
@@ -300,6 +310,12 @@ export function LessonContentViewer({ lesson, onSubmitAssignment }: LessonConten
               </Button>
             </div>
           </TabsContent>
+
+          {isTutorOrAdmin && (
+            <TabsContent value="submissions" className="space-y-4">
+              <LessonSubmissions lessonId={lesson.id} courseId={lesson.course_id} />
+            </TabsContent>
+          )}
         </Tabs>
       </CardContent>
     </Card>

@@ -633,6 +633,7 @@ export type Database = {
           graded_at: string | null
           graded_by: string | null
           id: string
+          lesson_id: string | null
           link: string | null
           portfolio_id: string | null
           review_status: string | null
@@ -650,6 +651,7 @@ export type Database = {
           graded_at?: string | null
           graded_by?: string | null
           id?: string
+          lesson_id?: string | null
           link?: string | null
           portfolio_id?: string | null
           review_status?: string | null
@@ -667,6 +669,7 @@ export type Database = {
           graded_at?: string | null
           graded_by?: string | null
           id?: string
+          lesson_id?: string | null
           link?: string | null
           portfolio_id?: string | null
           review_status?: string | null
@@ -681,6 +684,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
             referencedColumns: ["id"]
           },
           {
