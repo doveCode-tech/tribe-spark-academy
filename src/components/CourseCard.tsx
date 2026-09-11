@@ -125,10 +125,10 @@ export function CourseCard({ course, enrollment, onEnroll, onContinue, isEnrolle
               <Button 
                 variant="outline" 
                 className="w-full border-2 hover:bg-primary hover:text-primary-foreground font-semibold"
-                onClick={onEnroll}
+                onClick={onContinue}
               >
                 <BookOpen className="w-4 h-4 mr-2" />
-                Enroll Now
+                View Course
               </Button>
             )}
           </div>

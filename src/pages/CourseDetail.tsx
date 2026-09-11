@@ -85,6 +85,7 @@ export default function CourseDetail() {
   }, [courseId, user]);
 
   const fetchCourseData = async () => {
+    try {
       const userRole = (userProfile?.role || "").toLowerCase();
       const isStaff = userRole === "admin" || userRole === "ultimate_tutor" || userRole === "tutor";
 

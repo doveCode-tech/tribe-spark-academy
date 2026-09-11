@@ -82,6 +82,7 @@ const [selectedCategory, setSelectedCategory] = useState("All");
         .from('enrollments')
         .select(`
           id,
+          course_id,
           status,
           progress_percentage,
           enrolled_at,

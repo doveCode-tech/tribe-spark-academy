@@ -124,10 +124,23 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           const currentSelected = selectedContactRef.current;
 
           // Check if message belongs to current active conversation
+          const isViewingStudentContact =
+            !isStudent &&
+            currentSelected &&
+            (currentSelected.role || "").toLowerCase() === "student";
+
           const isCurrentConvo =
             currentSelected &&
-            ((newMsg.sender_id === user.id && newMsg.recipient_id === currentSelected.auth_user_id) ||
-             (newMsg.sender_id === currentSelected.auth_user_id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)));
+            (
+              // Normal: current user is in the conversation
+              (newMsg.sender_id === user.id && newMsg.recipient_id === currentSelected.auth_user_id) ||
+              (newMsg.sender_id === currentSelected.auth_user_id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)) ||
+              // Staff supervision: viewing a student — show all messages involving that student
+              (isViewingStudentContact && (
+                newMsg.sender_id === currentSelected.auth_user_id ||
+                newMsg.recipient_id === currentSelected.auth_user_id
+              ))
+            );
 
           if (isCurrentConvo) {
             setMessages((prev) => {
@@ -155,13 +168,29 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     if (!user || !contact) return;
 
     try {
-      const { data, error } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .or(
-          `and(sender_id.eq.${user.id},recipient_id.eq.${contact.auth_user_id}),and(sender_id.eq.${contact.auth_user_id},recipient_id.eq.${user.id})`
-        )
-        .order("created_at", { ascending: true });
+      const isViewingStudent =
+        !isStudent && (contact.role || "").toLowerCase() === "student";
+
+      let query;
+      if (isViewingStudent) {
+        // Staff supervision: show ALL messages where this student is sender or recipient
+        query = supabase
+          .from("chat_messages")
+          .select("*")
+          .or(
+            `sender_id.eq.${contact.auth_user_id},recipient_id.eq.${contact.auth_user_id}`
+          );
+      } else {
+        // Normal two-way thread between current user and contact
+        query = supabase
+          .from("chat_messages")
+          .select("*")
+          .or(
+            `and(sender_id.eq.${user.id},recipient_id.eq.${contact.auth_user_id}),and(sender_id.eq.${contact.auth_user_id},recipient_id.eq.${user.id})`
+          );
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: true });
 
       if (error) {
         console.error("Error fetching messages:", error);
