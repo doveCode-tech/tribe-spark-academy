@@ -145,10 +145,17 @@ export function StudentDashboard() {
     }
   };
 
+  const studentDisplayName = userProfile?.first_name 
+    ? `${userProfile.first_name}${userProfile.last_name ? ` ${userProfile.last_name}` : ''}`
+    : (userProfile?.name || '');
+
   return (
     <div className="space-y-8">
       {/* Hero Section */}
-      <HeroSection onStartLearning={() => window.location.href = '/courses'} />
+      <HeroSection 
+        studentName={studentDisplayName}
+        onStartLearning={() => window.location.href = '/courses'} 
+      />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

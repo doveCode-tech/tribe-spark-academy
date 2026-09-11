@@ -103,9 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
 
             // Show welcome message only on login event
-            if (event === 'SIGNED_IN' && (profile?.name || session.user.email)) {
+            if (event === 'SIGNED_IN') {
+              const displayName = profile?.first_name 
+                ? `${profile.first_name}${profile.last_name ? ` ${profile.last_name}` : ''}`
+                : (profile?.name || session.user.user_metadata?.name || session.user.email);
+
               toast({
-                title: `Welcome back, ${profile?.name || session.user.email}!`,
+                title: `Welcome back, ${displayName}! 🚀`,
                 description: 'Successfully logged in.',
               });
             }

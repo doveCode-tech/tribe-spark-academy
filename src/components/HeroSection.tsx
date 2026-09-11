@@ -3,9 +3,12 @@ import { ArrowRight, BookOpen, Zap, Trophy } from "lucide-react";
 
 interface HeroSectionProps {
   onStartLearning: () => void;
+  studentName?: string;
 }
 
-export function HeroSection({ onStartLearning }: HeroSectionProps) {
+export function HeroSection({ onStartLearning, studentName }: HeroSectionProps) {
+  const displayName = studentName?.trim() || "";
+
   return (
     <div className="relative overflow-hidden bg-gradient-hero rounded-3xl p-8 md:p-12 text-white shadow-glow">
       {/* Background decorations */}
@@ -17,10 +20,10 @@ export function HeroSection({ onStartLearning }: HeroSectionProps) {
           <div className="space-y-6">
             <div className="space-y-4">
               <h1 className="text-4xl md:text-6xl font-bold leading-tight">
-                Learn to Code,
+                {displayName ? `Welcome, ${displayName}!` : "Learn to Code,"}
                 <br />
                 <span className="bg-gradient-rainbow bg-clip-text text-transparent">
-                  Create Amazing Projects
+                  {displayName ? "Ready to Build Amazing Projects?" : "Create Amazing Projects"}
                 </span>
               </h1>
               
