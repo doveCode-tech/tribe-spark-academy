@@ -1,12 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MessageCircle, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LiveChat } from "./LiveChat";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 export function LiveChatWidget() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Listen for real-time incoming messages to notify user when widget is minimized
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`widget-unread-sync-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_messages",
+        },
+        (payload) => {
+          const newMsg = payload.new as any;
+          if (newMsg.sender_id !== user.id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)) {
+            if (!isOpen) {
+              setUnreadCount((prev) => prev + 1);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, isOpen]);
+
+  const handleToggle = () => {
+    if (!isOpen) {
+      setUnreadCount(0);
+    }
+    setIsOpen(!isOpen);
+  };
 
   // Only render if user is logged in
   if (!user) return null;
@@ -52,24 +90,31 @@ export function LiveChatWidget() {
       )}
 
       {/* Floating Trigger Button (like EarlySTEMer "Open Chat") */}
-      <Button
-        onClick={() => setIsOpen(!isOpen)}
-        className="h-12 px-5 rounded-full shadow-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-medium flex items-center gap-2 transition-transform hover:scale-105"
-      >
-        {isOpen ? (
-          <>
-            <X className="w-5 h-5" />
-            <span>Close Chat</span>
-          </>
-        ) : (
-          <>
-            <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-              <MessageCircle className="w-4 h-4" />
-            </div>
-            <span>Open Chat</span>
-          </>
+      <div className="relative">
+        {unreadCount > 0 && !isOpen && (
+          <span className="absolute -top-1.5 -left-1.5 z-10 bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center shadow animate-bounce">
+            {unreadCount}
+          </span>
         )}
-      </Button>
+        <Button
+          onClick={handleToggle}
+          className="h-12 px-5 rounded-full shadow-lg bg-[#f97316] hover:bg-[#ea580c] text-white font-medium flex items-center gap-2 transition-transform hover:scale-105"
+        >
+          {isOpen ? (
+            <>
+              <X className="w-5 h-5" />
+              <span>Close Chat</span>
+            </>
+          ) : (
+            <>
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                <MessageCircle className="w-4 h-4" />
+              </div>
+              <span>Open Chat</span>
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

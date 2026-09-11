@@ -81,18 +81,24 @@ export function StudentDashboard() {
 
   const fetchEnrolledCourses = async () => {
     try {
+      const studentId = userProfile?.auth_user_id;
+      if (!studentId) return;
+
       const { data, error } = await supabase
         .from('enrollments')
         .select(`
           *,
           courses (*)
         `)
-        .eq('student_id', userProfile?.auth_user_id);
+        .eq('student_id', studentId)
+        .eq('status', 'active');
 
       if (error) {
         console.error('Error fetching enrolled courses:', error);
       } else {
-        setEnrolledCourses(data || []);
+        // Only retain valid courses
+        const valid = (data || []).filter(item => item.courses && item.courses.id);
+        setEnrolledCourses(valid);
       }
     } catch (error) {
       console.error('Error fetching enrolled courses:', error);

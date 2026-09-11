@@ -28,6 +28,8 @@ interface Lesson {
   order_index: number;
   video_urls: string[] | null;
   youtube_urls: string[] | null;
+  exercise_video_urls?: string[] | null;
+  exercise_youtube_urls?: string[] | null;
   exercises: any;
   content_type: string;
   assignment_required: boolean;
@@ -549,6 +551,10 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
   const [uploadedVideos, setUploadedVideos] = useState<string[]>(lesson?.video_urls || []);
   const [youtubeUrls, setYoutubeUrls] = useState<string[]>(lesson?.youtube_urls || []);
   const [newYoutubeUrl, setNewYoutubeUrl] = useState('');
+  const [exerciseVideos, setExerciseVideos] = useState<string[]>(lesson?.exercise_video_urls || []);
+  const [exerciseYoutubeUrls, setExerciseYoutubeUrls] = useState<string[]>(lesson?.exercise_youtube_urls || []);
+  const [newExerciseYoutubeUrl, setNewExerciseYoutubeUrl] = useState('');
+  const [uploadingExercise, setUploadingExercise] = useState(false);
   const [formData, setFormData] = useState({
     title: lesson?.title || '',
     description: lesson?.description || '',
@@ -561,6 +567,71 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
     assignment_data: lesson?.assignment_data || null,
     quiz_data: lesson?.quiz_data || null,
   });
+
+  const handleExerciseVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingExercise(true);
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `exercise-${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('lesson-videos')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('lesson-videos')
+          .getPublicUrl(filePath);
+
+        return publicUrl;
+      });
+
+      const urls = await Promise.all(uploadPromises);
+      setExerciseVideos([...exerciseVideos, ...urls]);
+      
+      toast({
+        title: "Success",
+        description: `Uploaded ${files.length} exercise video(s).`,
+      });
+    } catch (error: any) {
+      console.error('Error uploading exercise videos:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload exercise videos.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingExercise(false);
+    }
+  };
+
+  const addExerciseYoutubeUrl = () => {
+    const url = newExerciseYoutubeUrl.trim();
+    if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+      setExerciseYoutubeUrls([...exerciseYoutubeUrls, url]);
+      setNewExerciseYoutubeUrl('');
+    } else if (url) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube URL.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeExerciseVideo = (index: number) => {
+    setExerciseVideos(exerciseVideos.filter((_, i) => i !== index));
+  };
+
+  const removeExerciseYoutubeUrl = (index: number) => {
+    setExerciseYoutubeUrls(exerciseYoutubeUrls.filter((_, i) => i !== index));
+  };
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -637,6 +708,8 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
       duration_minutes: formData.duration_minutes,
       video_urls: uploadedVideos,
       youtube_urls: youtubeUrls,
+      exercise_video_urls: exerciseVideos,
+      exercise_youtube_urls: exerciseYoutubeUrls,
       assignment_required: formData.assignment_required,
       quiz_required: formData.quiz_required,
       is_end_of_course: formData.is_end_of_course,
@@ -832,6 +905,104 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
           <p className="text-xs text-muted-foreground">
             Add YouTube tutorial links for students to watch
           </p>
+        </div>
+
+        <Separator />
+
+        {/* Exercise Videos & Guides (For exercises) */}
+        <div className="space-y-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+          <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+            <Video className="w-4 h-4 text-emerald-600" />
+            Exercise Videos & Walkthroughs
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Upload or link demonstration videos specifically for students to complete this lesson's exercises.
+          </p>
+
+          {/* Exercise Uploaded Videos Display */}
+          {exerciseVideos.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Exercise Video Uploads ({exerciseVideos.length})</Label>
+              {exerciseVideos.map((url, index) => (
+                <div key={index} className="flex items-center justify-between p-2.5 bg-background rounded-lg border">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Video className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-sm truncate">{url.split('/').pop()}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeExerciseVideo(index)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Video Upload input for Exercises */}
+          <div className="border-2 border-dashed border-emerald-500/30 rounded-lg p-3 bg-background/50 text-center">
+            <Label htmlFor="exercise-video-upload" className="cursor-pointer block">
+              <div className="flex flex-col items-center gap-1.5">
+                <Upload className="w-6 h-6 text-emerald-600" />
+                <span className="text-xs font-medium">Upload Exercise Video from Device</span>
+                <span className="text-[11px] text-muted-foreground">MP4, MOV, WebM</span>
+              </div>
+            </Label>
+            <Input
+              id="exercise-video-upload"
+              type="file"
+              accept="video/*"
+              multiple
+              onChange={handleExerciseVideoUpload}
+              disabled={uploadingExercise}
+              className="hidden"
+            />
+            {uploadingExercise && (
+              <div className="mt-1 text-xs text-emerald-600 font-medium">
+                Uploading exercise video...
+              </div>
+            )}
+          </div>
+
+          {/* Exercise YouTube Guide Links */}
+          {exerciseYoutubeUrls.length > 0 && (
+            <div className="space-y-1.5 mt-2">
+              <Label className="text-xs font-semibold">Exercise YouTube Guides ({exerciseYoutubeUrls.length})</Label>
+              {exerciseYoutubeUrls.map((url, index) => (
+                <div key={index} className="flex items-center justify-between p-2.5 bg-background rounded-lg border">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Youtube className="w-4 h-4 text-red-500 shrink-0" />
+                    <span className="text-xs truncate">{url}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeExerciseYoutubeUrl(index)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Input
+              value={newExerciseYoutubeUrl}
+              onChange={(e) => setNewExerciseYoutubeUrl(e.target.value)}
+              placeholder="Exercise YouTube Guide URL..."
+              className="text-xs h-9"
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addExerciseYoutubeUrl())}
+            />
+            <Button type="button" onClick={addExerciseYoutubeUrl} variant="outline" size="sm">
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Add
+            </Button>
+          </div>
         </div>
 
         <Separator />

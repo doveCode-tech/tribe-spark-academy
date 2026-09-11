@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, BookOpen, Clock, Play, CheckCircle, Lock, Trophy } from 'lucide-react';
+import { ArrowLeft, BookOpen, Clock, Play, CheckCircle, Lock, Trophy, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -13,15 +13,26 @@ import { CourseProgressTracker } from '@/components/CourseProgressTracker';
 import { InCourseGames } from '@/components/InCourseGames';
 import { QuizInterface } from '@/components/QuizInterface';
 import { ProjectSubmission } from '@/components/ProjectSubmission';
-import { SequentialLessonLock, LessonCard } from '@/components/SequentialLessonLock';
+import { CourseAccordionLessons } from '@/components/CourseAccordionLessons';
+import { CourseParticipantsDialog } from '@/components/CourseParticipantsDialog';
 import { QuizSection } from '@/components/QuizSection';
 
 interface Lesson {
   id: string;
+  course_id: string;
   title: string;
   description: string;
+  content?: string;
   duration_minutes: number;
   order_index: number;
+  video_urls?: string[] | null;
+  youtube_urls?: string[] | null;
+  exercise_video_urls?: string[] | null;
+  exercise_youtube_urls?: string[] | null;
+  exercises?: any;
+  assignment_required?: boolean;
+  quiz_required?: boolean;
+  is_end_of_course?: boolean;
   completed?: boolean;
 }
 
@@ -35,7 +46,7 @@ interface Course {
 export default function CourseDetail() {
   const { courseId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const { toast } = useToast();
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -74,23 +85,29 @@ export default function CourseDetail() {
   }, [courseId, user]);
 
   const fetchCourseData = async () => {
-    try {
-      // Check if user is enrolled in this course
-      const { data: enrollment, error: enrollmentError } = await supabase
-        .from('enrollments')
-        .select('*')
-        .eq('course_id', courseId)
-        .eq('student_id', user?.id)
-        .maybeSingle();
+      const userRole = (userProfile?.role || "").toLowerCase();
+      const isStaff = userRole === "admin" || userRole === "ultimate_tutor" || userRole === "tutor";
 
-      if (enrollmentError || !enrollment) {
-        toast({
-          title: "Access Denied",
-          description: "You are not enrolled in this course.",
-          variant: "destructive",
-        });
-        navigate('/courses');
-        return;
+      if (!isStaff) {
+        // Check if student is enrolled in this course (checking both user.id and auth_user_id)
+        const studentId = userProfile?.auth_user_id || user?.id;
+        const { data: enrollment, error: enrollmentError } = await supabase
+          .from('enrollments')
+          .select('*')
+          .eq('course_id', courseId)
+          .eq('student_id', studentId)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (enrollmentError || !enrollment) {
+          toast({
+            title: "Access Denied",
+            description: "You are not enrolled in this course.",
+            variant: "destructive",
+          });
+          navigate('/courses');
+          return;
+        }
       }
 
       // Fetch course details
@@ -216,15 +233,27 @@ export default function CourseDetail() {
     <LMSLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <Button 
             variant="outline" 
             onClick={() => navigate('/courses')}
-            className="mb-4"
+            className="mb-2"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Courses
           </Button>
+
+          {/* Participants Dialog visible to all tutors and admins */}
+          {(userProfile?.role === 'admin' || userProfile?.role === 'ultimate_tutor' || userProfile?.role === 'tutor') && (
+            <div className="flex items-center gap-2 mb-2">
+              <CourseParticipantsDialog
+                courseId={course.id}
+                courseTitle={course.title}
+                triggerLabel="View Course Participants"
+                onEnrollmentChanged={fetchCourseData}
+              />
+            </div>
+          )}
         </div>
 
         {/* Course Info */}
@@ -250,48 +279,38 @@ export default function CourseDetail() {
         {/* Course Progress Tracker */}
         <CourseProgressTracker courseId={course.id} />
 
-        {/* Lessons */}
+        {/* Lessons Accordion View */}
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <BookOpen className="w-5 h-5 mr-2" />
-              Course Lessons
-            </CardTitle>
-            <CardDescription>
-              {lessons.length} lessons in this course
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {lessons.map((lesson, index) => {
-              // Sequential unlock: first lesson always unlocked, others unlock after previous is completed
-              const isFirstLesson = index === 0;
-              const previousLessonCompleted = index > 0 ? lessons[index - 1].completed : true;
-              const isUnlocked = isFirstLesson || previousLessonCompleted;
-              
-              return (
-                <div key={lesson.id}>
-                  <LessonCard
-                    lesson={lesson}
-                    isUnlocked={isUnlocked}
-                    isCompleted={lesson.completed || false}
-                    onStart={() => isUnlocked && startLesson(lesson.id)}
-                  />
-                  
-                  {/* Mini-games after lessons 3 and 7 */}
-                  {(index + 1 === 3 || index + 1 === 7) && lesson.completed && (
-                    <div className="mt-4">
-                      <InCourseGames courseId={course.id} lessonNumber={index + 1} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            
-            {lessons.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No lessons available in this course yet.</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center text-xl">
+                  <BookOpen className="w-5 h-5 mr-2 text-primary" />
+                  Course Content & Lessons
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Click on any lesson below to expand videos, exercises, and assignment instructions.
+                </CardDescription>
               </div>
+              <Badge variant="outline" className="text-xs">
+                {lessons.length} {lessons.length === 1 ? 'Lesson' : 'Lessons'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {lessons.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-40 text-primary" />
+                <p className="font-medium">No lessons available in this course yet.</p>
+                <p className="text-xs mt-1">Lessons will appear here once added by your tutor.</p>
+              </div>
+            ) : (
+              <CourseAccordionLessons
+                courseId={course.id}
+                lessons={lessons}
+                canEdit={userProfile?.role === 'admin' || userProfile?.role === 'ultimate_tutor' || userProfile?.role === 'tutor'}
+                onStartLesson={startLesson}
+              />
             )}
           </CardContent>
         </Card>

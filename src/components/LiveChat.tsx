@@ -38,12 +38,19 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [contacts, setContacts] = useState<ChatUser[]>([]);
   const [selectedContact, setSelectedContact] = useState<ChatUser | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const selectedContactRef = useRef<ChatUser | null>(null);
 
-  const isStudent = userProfile?.role === "student";
+  // Keep ref in sync so real-time callback always has current selected contact
+  useEffect(() => {
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
+
+  const isStudent = (userProfile?.role || "").toLowerCase() === "student";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,16 +72,17 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           const { data, error } = await supabase
             .from("users")
             .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
-            .in("role", ["tutor", "ultimate_tutor", "admin"])
+            .in("role", ["tutor", "ultimate_tutor", "admin", "Tutor", "Ultimate_tutor", "Admin"])
             .order("role", { ascending: true });
 
           if (error) throw error;
-          setContacts(data || []);
-          if (data && data.length > 0) {
-            setSelectedContact(data[0]);
+          const validContacts = data || [];
+          setContacts(validContacts);
+          if (validContacts.length > 0 && !selectedContactRef.current) {
+            setSelectedContact(validContacts[0]);
           }
         } else {
-          // Staff (admin/tutors) can see students and staff to supervise and answer questions
+          // Staff (admin/tutors) can see students and fellow staff to supervise and answer questions
           const { data, error } = await supabase
             .from("users")
             .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
@@ -83,8 +91,8 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           if (error) throw error;
           const filtered = (data || []).filter(u => u.auth_user_id !== user.id);
           setContacts(filtered);
-          if (filtered.length > 0) {
-            const firstStudent = filtered.find(u => u.role === "student") || filtered[0];
+          if (filtered.length > 0 && !selectedContactRef.current) {
+            const firstStudent = filtered.find(u => (u.role || "").toLowerCase() === "student") || filtered[0];
             setSelectedContact(firstStudent);
           }
         }
@@ -98,37 +106,12 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     fetchContacts();
   }, [user, isStudent]);
 
-  // Fetch messages with the selected contact
-  const fetchMessages = async () => {
-    if (!user || !selectedContact) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .or(
-          `and(sender_id.eq.${user.id},recipient_id.eq.${selectedContact.auth_user_id}),and(sender_id.eq.${selectedContact.auth_user_id},recipient_id.eq.${user.id})`
-        )
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        console.error("Error fetching messages:", error);
-        return;
-      }
-
-      setMessages(data || []);
-    } catch (err) {
-      console.error("Error in fetchMessages:", err);
-    }
-  };
-
+  // Global Realtime listener across all messages for the current user
   useEffect(() => {
-    if (!selectedContact) return;
-    fetchMessages();
+    if (!user?.id) return;
 
-    // Subscribe to real-time chat updates
     const channel = supabase
-      .channel(`chat_${user?.id}_${selectedContact.auth_user_id}`)
+      .channel(`user-chat-sync-${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -138,15 +121,25 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
         },
         (payload) => {
           const newMsg = payload.new as ChatMessage;
-          const isRelated =
-            (newMsg.sender_id === user?.id && newMsg.recipient_id === selectedContact.auth_user_id) ||
-            (newMsg.sender_id === selectedContact.auth_user_id && newMsg.recipient_id === user?.id);
+          const currentSelected = selectedContactRef.current;
 
-          if (isRelated) {
+          // Check if message belongs to current active conversation
+          const isCurrentConvo =
+            currentSelected &&
+            ((newMsg.sender_id === user.id && newMsg.recipient_id === currentSelected.auth_user_id) ||
+             (newMsg.sender_id === currentSelected.auth_user_id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)));
+
+          if (isCurrentConvo) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
             });
+          } else if (newMsg.sender_id !== user.id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)) {
+            // Message from another contact -> increment unread count for that sender
+            setUnreadCounts((prev) => ({
+              ...prev,
+              [newMsg.sender_id]: (prev[newMsg.sender_id] || 0) + 1,
+            }));
           }
         }
       )
@@ -155,7 +148,52 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [user?.id]);
+
+  // Fetch messages with the selected contact
+  const fetchMessages = async (contact: ChatUser) => {
+    if (!user || !contact) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .or(
+          `and(sender_id.eq.${user.id},recipient_id.eq.${contact.auth_user_id}),and(sender_id.eq.${contact.auth_user_id},recipient_id.eq.${user.id})`
+        )
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching messages:", error);
+        return;
+      }
+
+      setMessages(data || []);
+      // Clear unread for this contact
+      setUnreadCounts((prev) => {
+        const next = { ...prev };
+        delete next[contact.auth_user_id];
+        return next;
+      });
+    } catch (err) {
+      console.error("Error in fetchMessages:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedContact) {
+      fetchMessages(selectedContact);
+    }
   }, [selectedContact, user]);
+
+  const handleSelectContact = (contact: ChatUser) => {
+    setSelectedContact(contact);
+    setUnreadCounts((prev) => {
+      const next = { ...prev };
+      delete next[contact.auth_user_id];
+      return next;
+    });
+  };
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !user || !selectedContact || sending) return;
@@ -165,17 +203,22 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     setSending(true);
 
     try {
-      const { error } = await supabase.from("chat_messages").insert({
+      const { data, error } = await supabase.from("chat_messages").insert({
         sender_id: user.id,
         recipient_id: selectedContact.auth_user_id,
         message: messageText,
-      });
+      }).select();
 
       if (error) {
         throw error;
       }
-      
-      fetchMessages();
+
+      if (data && data.length > 0) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data[0].id)) return prev;
+          return [...prev, data[0]];
+        });
+      }
     } catch (err: any) {
       console.error("Failed to send message:", err);
       toast({
@@ -238,20 +281,28 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
             contacts.map((contact) => {
               const isSelected = selectedContact?.auth_user_id === contact.auth_user_id;
               const name = getContactName(contact);
+              const unread = unreadCounts[contact.auth_user_id] || 0;
               return (
                 <button
                   key={contact.auth_user_id}
-                  onClick={() => setSelectedContact(contact)}
+                  onClick={() => handleSelectContact(contact)}
                   className={`w-full text-left p-3.5 flex items-center gap-3 transition-colors ${
                     isSelected ? "bg-primary/10 border-l-4 border-primary" : "hover:bg-muted/50"
                   }`}
                 >
-                  <Avatar className="w-10 h-10 shrink-0">
-                    <AvatarImage src={contact.avatar_url || undefined} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
-                      {name.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative shrink-0">
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={contact.avatar_url || undefined} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
+                        {name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    {unread > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center animate-pulse">
+                        {unread}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1 mb-1">
                       <span className="font-semibold text-sm truncate text-foreground">{name}</span>

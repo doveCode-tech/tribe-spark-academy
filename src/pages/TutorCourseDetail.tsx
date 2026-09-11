@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+import { CourseParticipantsDialog } from '@/components/CourseParticipantsDialog';
+
 interface Course {
   id: string;
   title: string;
@@ -202,15 +204,24 @@ export default function TutorCourseDetail() {
     <LMSLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <Button 
             variant="outline" 
             onClick={() => navigate('/')}
-            className="mb-4"
+            className="mb-2"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Dashboard
           </Button>
+
+          <div className="flex items-center gap-2 mb-2">
+            <CourseParticipantsDialog
+              courseId={course.id}
+              courseTitle={course.title}
+              triggerLabel="View Course Participants"
+              onEnrollmentChanged={fetchCourseData}
+            />
+          </div>
         </div>
 
         {/* Course Info */}

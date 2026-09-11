@@ -35,8 +35,30 @@ const [selectedCategory, setSelectedCategory] = useState("All");
       if (isAdmin || isUltimateTutor) {
         fetchUsers();
       }
+
+      // Realtime listener for course enrollments
+      const studentId = userProfile?.auth_user_id || user.id;
+      const channel = supabase
+        .channel(`courses-enrollment-sync-${studentId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'enrollments',
+            filter: `student_id=eq.${studentId}`
+          },
+          () => {
+            fetchEnrolledCourses();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
-  }, [user, isAdmin, isUltimateTutor]);
+  }, [user, userProfile, isAdmin, isUltimateTutor]);
 
   const fetchUsers = async () => {
     try {
@@ -53,6 +75,9 @@ const [selectedCategory, setSelectedCategory] = useState("All");
 
   const fetchEnrolledCourses = async () => {
     try {
+      const studentId = userProfile?.auth_user_id || user?.id;
+      if (!studentId) return;
+
       const { data, error } = await supabase
         .from('enrollments')
         .select(`
@@ -67,7 +92,7 @@ const [selectedCategory, setSelectedCategory] = useState("All");
             category
           )
         `)
-        .eq('student_id', user?.id)
+        .eq('student_id', studentId)
         .eq('status', 'active');
 
       if (error) throw error;
