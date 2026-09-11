@@ -149,11 +149,22 @@ export function StudentDashboard() {
     ? `${userProfile.first_name}${userProfile.last_name ? ` ${userProfile.last_name}` : ''}`
     : (userProfile?.name || '');
 
+  // Calculate overall average course progress
+  const totalProgress = enrolledCourses.reduce(
+    (acc, curr) => acc + (Number(curr.progress_percentage) || 0),
+    0
+  );
+  const averageProgress = enrolledCourses.length > 0 
+    ? Math.round(totalProgress / enrolledCourses.length) 
+    : 0;
+
   return (
     <div className="space-y-8">
       {/* Hero Section */}
       <HeroSection 
         studentName={studentDisplayName}
+        enrolledCount={enrolledCourses.length}
+        progressPercentage={averageProgress}
         onStartLearning={() => window.location.href = '/courses'} 
       />
 

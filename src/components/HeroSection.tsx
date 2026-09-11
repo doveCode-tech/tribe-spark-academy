@@ -1,107 +1,90 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BookOpen, Zap, Trophy } from "lucide-react";
+import { ArrowRight, BookOpen, Zap, Sparkles, TrendingUp } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 interface HeroSectionProps {
   onStartLearning: () => void;
   studentName?: string;
+  enrolledCount?: number;
+  progressPercentage?: number;
 }
 
-export function HeroSection({ onStartLearning, studentName }: HeroSectionProps) {
+export function HeroSection({
+  onStartLearning,
+  studentName,
+  enrolledCount = 0,
+  progressPercentage = 0,
+}: HeroSectionProps) {
   const displayName = studentName?.trim() || "";
 
   return (
-    <div className="relative overflow-hidden bg-gradient-hero rounded-3xl p-8 md:p-12 text-white shadow-glow">
-      {/* Background decorations */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32"></div>
-      <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24"></div>
-      
-      <div className="relative z-10 max-w-4xl">
-        <div className="grid md:grid-cols-2 gap-8 items-center">
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <h1 className="text-4xl md:text-6xl font-bold leading-tight">
-                {displayName ? `Welcome, ${displayName}!` : "Learn to Code,"}
-                <br />
-                <span className="bg-gradient-rainbow bg-clip-text text-transparent">
-                  {displayName ? "Ready to Build Amazing Projects?" : "Create Amazing Projects"}
-                </span>
-              </h1>
-              
-              <p className="text-xl text-white/90 leading-relaxed">
-                Join thousands of young learners on an exciting educational journey. 
-                Build games, websites, robots, and bring your creative ideas to life.
-              </p>
-            </div>
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/95 via-primary to-blue-700 p-6 md:p-8 text-white shadow-md border border-primary/20">
+      {/* Subtle background glow */}
+      <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+      <div className="absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-blue-400/10 blur-2xl pointer-events-none" />
 
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button 
-                size="lg" 
-                className="bg-white text-primary hover:bg-white/90 font-bold text-lg px-8 py-4 rounded-xl"
-                onClick={onStartLearning}
-              >
-                Start Learning Today
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                size="lg"
-                className="border-white/30 text-white hover:bg-white/10 font-semibold text-lg px-8 py-4 rounded-xl"
-                onClick={onStartLearning}
-              >
-                <Zap className="w-5 h-5 mr-2" />
-                Interactive Lessons
-              </Button>
-            </div>
-
-            <div className="flex items-center space-x-8 pt-4">
-              <div className="flex items-center space-x-2">
-                <BookOpen className="w-6 h-6 text-cyan" />
-                <div className="text-sm">
-                  <div className="font-semibold">10+ Courses</div>
-                  <div className="text-white/70">From Python to AI</div>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Trophy className="w-6 h-6 text-yellow" />
-                <div className="text-sm">
-                  <div className="font-semibold">Real Projects</div>
-                  <div className="text-white/70">Build portfolio</div>
-                </div>
-              </div>
-            </div>
+      <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        {/* Left Welcome Details */}
+        <div className="space-y-3 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-xs font-semibold tracking-wide uppercase">
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+            <span>Student Dashboard</span>
           </div>
 
-          <div className="hidden md:block">
-            <div className="relative">
-              {/* Floating code elements with professional icons */}
-              <div className="absolute -top-4 -right-4 bg-white/20 backdrop-blur-sm rounded-xl p-4 rotate-12 animate-bounce">
-                <BookOpen className="w-8 h-8" />
-                <div className="text-xs font-mono mt-2">Python</div>
-              </div>
-              
-              <div className="absolute top-16 -left-8 bg-white/20 backdrop-blur-sm rounded-xl p-4 -rotate-12 animate-bounce" style={{ animationDelay: '0.5s' }}>
-                <Zap className="w-8 h-8" />
-                <div className="text-xs font-mono mt-2">AI & ML</div>
-              </div>
-              
-              <div className="absolute bottom-8 right-8 bg-white/20 backdrop-blur-sm rounded-xl p-4 rotate-6 animate-bounce" style={{ animationDelay: '1s' }}>
-                <Trophy className="w-8 h-8" />
-                <div className="text-xs font-mono mt-2">Games</div>
-              </div>
-              
-              {/* Main illustration placeholder */}
-              <div className="w-full h-64 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <BookOpen className="w-16 h-16 mx-auto" />
-                  <div className="text-lg font-semibold">Start Your Journey</div>
-                </div>
-              </div>
+          <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-white">
+            {displayName ? `Welcome back, ${displayName}!` : "Welcome to STEMTribe!"}
+          </h1>
+
+          <p className="text-sm md:text-base text-white/85 leading-relaxed">
+            {enrolledCount > 0
+              ? `You are enrolled in ${enrolledCount} active course${enrolledCount > 1 ? "s" : ""}. Continue where you left off or explore your lessons!`
+              : "Welcome to your personalized learning portal! Your tutor or admin will enroll you in your courses soon."}
+          </p>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button
+              size="default"
+              className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm rounded-lg px-5"
+              onClick={onStartLearning}
+            >
+              Start Learning Today
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="default"
+              className="border-white/40 bg-white/10 text-white hover:bg-white/20 font-medium rounded-lg px-5 backdrop-blur-sm"
+              onClick={onStartLearning}
+            >
+              <Zap className="w-4 h-4 mr-2 text-yellow-300" />
+              Interactive Lessons
+            </Button>
+          </div>
+        </div>
+
+        {/* Right Overall Progress Summary Card */}
+        <div className="w-full md:w-72 bg-white/10 backdrop-blur-md rounded-xl p-5 border border-white/20 shadow-inner flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-300" />
+              <span className="text-xs font-medium text-white/90">Overall Learning Progress</span>
             </div>
+            <span className="text-lg font-extrabold text-white">{progressPercentage}%</span>
+          </div>
+
+          <Progress
+            value={progressPercentage}
+            className="h-2.5 bg-white/20"
+          />
+
+          <div className="flex items-center justify-between text-xs text-white/75 mt-3 pt-3 border-t border-white/10">
+            <span>Enrolled Courses</span>
+            <span className="font-semibold text-white">{enrolledCount}</span>
           </div>
         </div>
       </div>
     </div>
   );
-}
+}
