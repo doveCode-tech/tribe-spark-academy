@@ -71,8 +71,9 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
   }, [messages]);
 
   // Fetch all users for sender lookup, plus filtered contacts for sidebar
+  // Wait for userProfile so isStudent is accurate before fetching
   useEffect(() => {
-    if (!user) return;
+    if (!user || userProfile === undefined) return;
 
     const fetchContacts = async () => {
       try {
@@ -235,8 +236,11 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
   useEffect(() => {
     if (selectedContact) {
       fetchMessages(selectedContact);
+    } else if (isStudent && user) {
+      // Students: load their messages even before a contact is auto-selected
+      fetchMessages({ auth_user_id: "", name: null, first_name: null, last_name: null, email: null, role: null, avatar_url: null });
     }
-  }, [selectedContact, user]);
+  }, [selectedContact, user, isStudent]);
 
   const handleSelectContact = (contact: ChatUser) => {
     setSelectedContact(contact);
@@ -248,7 +252,14 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !user || !selectedContact || sending) return;
+    if (!inputMessage.trim() || !user || sending) return;
+
+    // For students with no contact auto-selected, pick the first available staff member
+    // or send with null recipient (broadcast) so staff can still see it
+    const recipientContact = selectedContact ?? (isStudent ? contacts[0] ?? null : null);
+
+    // Staff must have a contact selected
+    if (!isStudent && !recipientContact) return;
 
     const messageText = inputMessage.trim();
     setInputMessage("");
@@ -257,7 +268,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     try {
       const { data, error } = await supabase.from("chat_messages").insert({
         sender_id: user.id,
-        recipient_id: selectedContact.auth_user_id,
+        recipient_id: recipientContact?.auth_user_id ?? null,
         message: messageText,
       }).select();
 
@@ -270,6 +281,11 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           if (prev.some((m) => m.id === data[0].id)) return prev;
           return [...prev, data[0]];
         });
+      }
+
+      // If student now has a recipient and no contact was selected, auto-select it
+      if (isStudent && !selectedContact && recipientContact) {
+        setSelectedContact(recipientContact);
       }
     } catch (err: any) {
       console.error("Failed to send message:", err);
@@ -432,26 +448,42 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
 
       {/* Right Chat Area */}
       <div className="flex-1 flex flex-col bg-card">
-        {selectedContact ? (
+        {(selectedContact || isStudent) ? (
           <>
             {/* Header */}
             <div className="p-4 border-b border-border flex items-center justify-between bg-card/60 backdrop-blur-sm">
               <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarImage src={selectedContact.avatar_url || undefined} />
-                  <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xs">
-                    {getContactName(selectedContact).slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-base text-foreground">
-                      {getContactName(selectedContact)}
-                    </h3>
-                    {getRoleBadge(selectedContact.role)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{selectedContact.email}</p>
-                </div>
+                {selectedContact ? (
+                  <>
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={selectedContact.avatar_url || undefined} />
+                      <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xs">
+                        {getContactName(selectedContact).slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-base text-foreground">
+                          {isStudent ? "Support Team" : getContactName(selectedContact)}
+                        </h3>
+                        {!isStudent && getRoleBadge(selectedContact.role)}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {isStudent ? "Your tutors & admins can see your messages" : selectedContact.email}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Avatar className="w-10 h-10">
+                      <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xs">ST</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="font-bold text-base text-foreground">Support Team</h3>
+                      <p className="text-xs text-muted-foreground">Your tutors & admins can see your messages</p>
+                    </div>
+                  </>
+                )}
               </div>
 
               {isStudent && (
@@ -472,8 +504,8 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
                   <h4 className="font-semibold text-sm mb-1">Start a conversation</h4>
                   <p className="text-xs text-muted-foreground max-w-sm">
                     {isStudent
-                      ? "Send a message to get help from your tutors. All your tutors and admins can see and reply."
-                      : `Send a reply or check in on ${getContactName(selectedContact)}'s learning journey.`}
+                      ? "Send a message below and your tutors will see it and reply."
+                      : selectedContact ? `Send a reply or check in on ${getContactName(selectedContact)}'s learning journey.` : ""}
                   </p>
                 </div>
               ) : (
@@ -546,7 +578,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
                   placeholder={
                     isStudent
                       ? "Ask your tutor a question..."
-                      : `Reply to ${getContactName(selectedContact)}...`
+                      : selectedContact ? `Reply to ${getContactName(selectedContact)}...` : "Send a message..."
                   }
                   disabled={sending}
                   className="flex-1 text-sm h-10"
