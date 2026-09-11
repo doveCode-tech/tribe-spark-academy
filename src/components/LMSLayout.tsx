@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchBar } from "@/components/SearchBar";
+import { LiveChatWidget } from "@/components/LiveChatWidget";
+
 interface LMSLayoutProps {
   children: React.ReactNode;
 }
@@ -62,6 +64,9 @@ export function LMSLayout({ children }: LMSLayoutProps) {
             {children}
           </main>
         </div>
+
+        {/* Floating Live Chat Widget */}
+        <LiveChatWidget />
       </div>
     </SidebarProvider>
   );

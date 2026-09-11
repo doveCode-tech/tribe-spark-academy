@@ -27,7 +27,11 @@ interface ChatUser {
   avatar_url: string | null;
 }
 
-export function LiveChat() {
+interface LiveChatProps {
+  isWidget?: boolean;
+}
+
+export function LiveChat({ isWidget = false }: LiveChatProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
   
@@ -206,13 +210,15 @@ export function LiveChat() {
   };
 
   return (
-    <Card className="shadow-card border border-border h-[calc(100vh-12rem)] min-h-[550px] flex overflow-hidden">
+    <Card className={`shadow-card border border-border flex overflow-hidden ${
+      isWidget ? "h-full w-full rounded-none border-0 shadow-none" : "h-[calc(100vh-12rem)] min-h-[550px]"
+    }`}>
       {/* Left Contacts Sidebar */}
-      <div className="w-80 border-r border-border flex flex-col bg-muted/20">
-        <div className="p-4 border-b border-border bg-card">
-          <h2 className="font-bold text-base flex items-center gap-2">
-            <MessageCircle className="w-5 h-5 text-primary" />
-            {isStudent ? "Chat With Your Tutors" : "Messages & Inquiries"}
+      <div className={`${isWidget ? "w-44 sm:w-56" : "w-80"} border-r border-border flex flex-col bg-muted/20`}>
+        <div className="p-3 border-b border-border bg-card">
+          <h2 className="font-bold text-xs sm:text-sm flex items-center gap-1.5">
+            <MessageCircle className="w-4 h-4 text-primary" />
+            {isStudent ? "Tutors" : "Conversations"}
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
             {isStudent 
