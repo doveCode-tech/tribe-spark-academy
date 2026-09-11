@@ -68,18 +68,25 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
       try {
         setLoading(true);
         if (isStudent) {
-          // Students can only see tutors, ultimate_tutors, and admins (NEVER other students)
+          // Students: fetch all users then filter out other students client-side
+          // This avoids brittle server-side role string matching
           const { data, error } = await supabase
             .from("users")
             .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
-            .in("role", ["tutor", "ultimate_tutor", "admin", "Tutor", "Ultimate_tutor", "Admin"])
+            .neq("auth_user_id", user.id)
             .order("role", { ascending: true });
 
           if (error) throw error;
-          const validContacts = data || [];
-          setContacts(validContacts);
-          if (validContacts.length > 0 && !selectedContactRef.current) {
-            setSelectedContact(validContacts[0]);
+
+          // Only show tutors, ultimate tutors, and admins — never other students
+          const staffContacts = (data || []).filter(u => {
+            const role = (u.role || "").toLowerCase().replace(/[\s-]/g, "_");
+            return role === "tutor" || role === "ultimate_tutor" || role === "admin";
+          });
+
+          setContacts(staffContacts);
+          if (staffContacts.length > 0 && !selectedContactRef.current) {
+            setSelectedContact(staffContacts[0]);
           }
         } else {
           // Staff (admin/tutors) can see students and fellow staff to supervise and answer questions
@@ -123,7 +130,30 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           const newMsg = payload.new as ChatMessage;
           const currentSelected = selectedContactRef.current;
 
-          // Check if message belongs to current active conversation
+          if (isStudent) {
+            // Students: show any message they sent or received from anyone
+            const involvesMe = newMsg.sender_id === user.id || newMsg.recipient_id === user.id;
+            if (involvesMe) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
+              // Increment unread if from someone other than current contact
+              if (
+                newMsg.sender_id !== user.id &&
+                currentSelected &&
+                newMsg.sender_id !== currentSelected.auth_user_id
+              ) {
+                setUnreadCounts((prev) => ({
+                  ...prev,
+                  [newMsg.sender_id]: (prev[newMsg.sender_id] || 0) + 1,
+                }));
+              }
+            }
+            return;
+          }
+
+          // Check if message belongs to current active conversation (staff view)
           const isViewingStudentContact =
             !isStudent &&
             currentSelected &&
@@ -161,7 +191,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, isStudent]);
 
   // Fetch messages with the selected contact
   const fetchMessages = async (contact: ChatUser) => {
@@ -172,7 +202,14 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
         !isStudent && (contact.role || "").toLowerCase() === "student";
 
       let query;
-      if (isViewingStudent) {
+      if (isStudent) {
+        // Students: fetch ALL messages they sent or received (from any staff member)
+        // so they never miss a message regardless of which contact is selected
+        query = supabase
+          .from("chat_messages")
+          .select("*")
+          .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`);
+      } else if (isViewingStudent) {
         // Staff supervision: show ALL messages where this student is sender or recipient
         query = supabase
           .from("chat_messages")
