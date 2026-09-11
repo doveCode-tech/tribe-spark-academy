@@ -106,12 +106,22 @@ const [selectedCategory, setSelectedCategory] = useState("All");
     }
   };
 
-  const categories = ["All", ...new Set(allCourses.map(course => course.category))];
+  const isStudent = !isAdmin && !isUltimateTutor && userProfile?.role !== 'tutor';
+
+  // For students: only show their enrolled courses. For staff/admin: show all courses
+  const baseCourses = isStudent
+    ? enrolledCourses.map(e => ({
+        ...e.courses,
+        enrollment: e,
+      })).filter(c => !!c && !!c.id)
+    : allCourses;
+
+  const categories = ["All", ...new Set(baseCourses.map((course: any) => course.category).filter(Boolean))];
   
-  const filteredCourses = allCourses.filter(course => {
-    const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         course.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         course.category.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredCourses = baseCourses.filter((course: any) => {
+    const matchesSearch = (course.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (course.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (course.category || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "All" || course.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -140,20 +150,23 @@ const [selectedCategory, setSelectedCategory] = useState("All");
         <div className="bg-gradient-hero rounded-3xl p-8 text-white">
           <div className="max-w-4xl">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Course Catalog 📚
+              {isStudent ? "My Enrolled Courses 📚" : "Course Management & Catalog 📚"}
             </h1>
             <p className="text-xl text-white/90 mb-6">
-              Explore amazing courses designed just for young learners! From coding to robotics, 
-              we have everything you need to become a tech superstar.
+              {isStudent 
+                ? "Here are the courses you are currently enrolled in. Continue your learning adventure!" 
+                : "Explore and manage courses designed for young learners! From coding to robotics."}
             </p>
             <div className="flex items-center space-x-6">
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-5 h-5" />
-                <span className="font-semibold">{allCourses.length} Fun Courses</span>
+                <span className="font-semibold">
+                  {baseCourses.length} {isStudent ? "Enrolled Course" : "Course"}{baseCourses.length !== 1 ? 's' : ''}
+                </span>
               </div>
               <div className="flex items-center space-x-2">
                 <BookOpen className="w-5 h-5" />
-                <span className="font-semibold">Beginner Friendly</span>
+                <span className="font-semibold">{isStudent ? "Active Learning" : "Beginner Friendly"}</span>
               </div>
             </div>
           </div>
@@ -284,12 +297,18 @@ const [selectedCategory, setSelectedCategory] = useState("All");
                 <div className="col-span-full text-center py-12">
                   <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
                   <h3 className="text-lg font-semibold mb-2">
-                    {searchTerm ? 'No courses found' : 'No courses available'}
+                    {searchTerm 
+                      ? 'No matching courses found' 
+                      : isStudent 
+                        ? 'No active course enrollments yet' 
+                        : 'No courses available'}
                   </h3>
                   <p className="text-muted-foreground">
                     {searchTerm 
                       ? 'Try adjusting your search terms or filters' 
-                      : 'Check back later for new courses!'
+                      : isStudent 
+                        ? 'Your tutor or admin will enroll you in your course soon!' 
+                        : 'Check back later for new courses!'
                     }
                   </p>
                 </div>

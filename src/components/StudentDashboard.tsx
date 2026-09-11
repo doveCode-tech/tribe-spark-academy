@@ -213,14 +213,10 @@ export function StudentDashboard() {
           ) : enrolledCourses.length === 0 ? (
             <Card className="p-8 text-center bg-gradient-to-br from-primary/5 to-secondary/5">
               <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Ready to Start Learning?</h3>
-              <p className="text-muted-foreground mb-6">
-                Choose from our amazing collection of kid-friendly courses!
+              <h3 className="text-xl font-semibold mb-2">Welcome to Your Learning Space!</h3>
+              <p className="text-muted-foreground mb-4">
+                You haven't been enrolled in any courses yet. Your tutor or administrator will assign your courses shortly!
               </p>
-              <Button className="bg-gradient-primary" onClick={() => window.location.href = '/courses'}>
-                <BookOpen className="w-4 h-4 mr-2" />
-                Browse Courses
-              </Button>
             </Card>
           ) : (
             <div className="grid gap-6">

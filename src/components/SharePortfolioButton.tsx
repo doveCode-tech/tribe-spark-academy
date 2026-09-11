@@ -20,7 +20,10 @@ export function SharePortfolioButton({ studentId }: SharePortfolioButtonProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   
-  const portfolioUrl = `${window.location.origin}/portfolio/${studentId}`;
+  const baseOrigin = window.location.origin.includes('localhost') 
+    ? window.location.origin 
+    : 'https://stemtribe.org';
+  const portfolioUrl = `${baseOrigin}/portfolio/student/${studentId}`;
 
   const handleCopy = async () => {
     try {

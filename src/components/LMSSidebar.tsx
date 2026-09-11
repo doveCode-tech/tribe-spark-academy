@@ -35,20 +35,20 @@ type UserRole = 'student' | 'tutor' | 'ultimate_tutor' | 'admin';
 const studentItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "My Courses", url: "/courses", icon: BookOpen },
+  { title: "Live Chat", url: "/chat", icon: MessageCircle },
   { title: "Portfolio", url: "/portfolio", icon: User },
   { title: "Achievements", url: "/achievements", icon: Trophy },
   { title: "Badges", url: "/badges", icon: Award },
   { title: "Profile", url: "/profile", icon: Settings },
-  { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
 
 const tutorItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Courses", url: "/courses", icon: BookOpen },
+  { title: "Live Chat", url: "/chat", icon: MessageCircle },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Badges", url: "/badges", icon: Award },
   { title: "Profile", url: "/profile", icon: Settings },
-  { title: "AI Assistant", url: "/chat", icon: MessageCircle },
 ];
 
 const ultimateTutorItems = [
@@ -56,6 +56,7 @@ const ultimateTutorItems = [
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Manage Users", url: "/users", icon: Users },
   { title: "Course Management", url: "/courses", icon: BookOpen },
+  { title: "Live Chat", url: "/chat", icon: MessageCircle },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Badges", url: "/badges", icon: Award },
   { title: "Profile", url: "/profile", icon: User },
@@ -67,6 +68,7 @@ const adminItems = [
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Manage Users", url: "/users", icon: Users },
   { title: "Course Management", url: "/courses", icon: BookOpen },
+  { title: "Live Chat", url: "/chat", icon: MessageCircle },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Badges", url: "/badges", icon: Award },
   { title: "Create Tutor", url: "/create-tutor", icon: PlusCircle },

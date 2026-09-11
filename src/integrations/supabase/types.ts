@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string
+          read_at: string | null
+          recipient_id: string | null
+          sender_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message: string
+          read_at?: string | null
+          recipient_id?: string | null
+          sender_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string
+          read_at?: string | null
+          recipient_id?: string | null
+          sender_id?: string
+        }
+        Relationships: []
+      }
       admin_settings: {
         Row: {
           created_at: string | null

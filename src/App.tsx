@@ -121,6 +121,7 @@ const App = () => (
               <TutorCourseDetail />
             </ProtectedRoute>
           } />
+          <Route path="/portfolio/student/:studentId" element={<PublicPortfolio />} />
           <Route path="/portfolio/:studentId" element={<PublicPortfolio />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
