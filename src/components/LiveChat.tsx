@@ -31,12 +31,23 @@ interface LiveChatProps {
   isWidget?: boolean;
 }
 
+// Helper: normalize role string for comparison
+function normalizeRole(role: string | null): string {
+  return (role || "").toLowerCase().replace(/[\s-]/g, "_");
+}
+
+function isStaffRole(role: string | null): boolean {
+  const r = normalizeRole(role);
+  return r === "tutor" || r === "ultimate_tutor" || r === "admin";
+}
+
 export function LiveChat({ isWidget = false }: LiveChatProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
-  
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [contacts, setContacts] = useState<ChatUser[]>([]);
+  const [allUsers, setAllUsers] = useState<ChatUser[]>([]); // for sender lookup
   const [selectedContact, setSelectedContact] = useState<ChatUser | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [inputMessage, setInputMessage] = useState("");
@@ -45,12 +56,11 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const selectedContactRef = useRef<ChatUser | null>(null);
 
-  // Keep ref in sync so real-time callback always has current selected contact
   useEffect(() => {
     selectedContactRef.current = selectedContact;
   }, [selectedContact]);
 
-  const isStudent = (userProfile?.role || "").toLowerCase() === "student";
+  const isStudent = normalizeRole(userProfile?.role) === "student";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -60,46 +70,38 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     scrollToBottom();
   }, [messages]);
 
-  // Fetch appropriate contacts
+  // Fetch all users for sender lookup, plus filtered contacts for sidebar
   useEffect(() => {
     if (!user) return;
 
     const fetchContacts = async () => {
       try {
         setLoading(true);
+
+        // Always fetch all users so we can resolve sender names/roles
+        const { data, error } = await supabase
+          .from("users")
+          .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
+          .neq("auth_user_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        const users = data || [];
+        setAllUsers(users);
+
         if (isStudent) {
-          // Students: fetch all users then filter out other students client-side
-          // This avoids brittle server-side role string matching
-          const { data, error } = await supabase
-            .from("users")
-            .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
-            .neq("auth_user_id", user.id)
-            .order("role", { ascending: true });
-
-          if (error) throw error;
-
-          // Only show tutors, ultimate tutors, and admins — never other students
-          const staffContacts = (data || []).filter(u => {
-            const role = (u.role || "").toLowerCase().replace(/[\s-]/g, "_");
-            return role === "tutor" || role === "ultimate_tutor" || role === "admin";
-          });
-
+          // Students: only show staff in sidebar
+          const staffContacts = users.filter(u => isStaffRole(u.role));
           setContacts(staffContacts);
           if (staffContacts.length > 0 && !selectedContactRef.current) {
             setSelectedContact(staffContacts[0]);
           }
         } else {
-          // Staff (admin/tutors) can see students and fellow staff to supervise and answer questions
-          const { data, error } = await supabase
-            .from("users")
-            .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
-            .order("created_at", { ascending: false });
-
-          if (error) throw error;
-          const filtered = (data || []).filter(u => u.auth_user_id !== user.id);
-          setContacts(filtered);
-          if (filtered.length > 0 && !selectedContactRef.current) {
-            const firstStudent = filtered.find(u => (u.role || "").toLowerCase() === "student") || filtered[0];
+          // Staff: show everyone (students first)
+          setContacts(users);
+          if (users.length > 0 && !selectedContactRef.current) {
+            const firstStudent = users.find(u => normalizeRole(u.role) === "student") || users[0];
             setSelectedContact(firstStudent);
           }
         }
@@ -113,7 +115,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     fetchContacts();
   }, [user, isStudent]);
 
-  // Global Realtime listener across all messages for the current user
+  // Global Realtime listener
   useEffect(() => {
     if (!user?.id) return;
 
@@ -131,54 +133,40 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           const currentSelected = selectedContactRef.current;
 
           if (isStudent) {
-            // Students: show any message they sent or received from anyone
+            // Students: show any message they sent or received
             const involvesMe = newMsg.sender_id === user.id || newMsg.recipient_id === user.id;
             if (involvesMe) {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === newMsg.id)) return prev;
                 return [...prev, newMsg];
               });
-              // Increment unread if from someone other than current contact
-              if (
-                newMsg.sender_id !== user.id &&
-                currentSelected &&
-                newMsg.sender_id !== currentSelected.auth_user_id
-              ) {
-                setUnreadCounts((prev) => ({
-                  ...prev,
-                  [newMsg.sender_id]: (prev[newMsg.sender_id] || 0) + 1,
-                }));
-              }
             }
             return;
           }
 
-          // Check if message belongs to current active conversation (staff view)
-          const isViewingStudentContact =
-            !isStudent &&
-            currentSelected &&
-            (currentSelected.role || "").toLowerCase() === "student";
+          // Staff view: check if the message involves the currently-selected student
+          if (currentSelected) {
+            const isViewingStudent = normalizeRole(currentSelected.role) === "student";
 
-          const isCurrentConvo =
-            currentSelected &&
-            (
-              // Normal: current user is in the conversation
-              (newMsg.sender_id === user.id && newMsg.recipient_id === currentSelected.auth_user_id) ||
-              (newMsg.sender_id === currentSelected.auth_user_id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)) ||
-              // Staff supervision: viewing a student — show all messages involving that student
-              (isViewingStudentContact && (
+            const isCurrentConvo = isViewingStudent
+              ? // Viewing a student: show ALL messages involving that student
                 newMsg.sender_id === currentSelected.auth_user_id ||
                 newMsg.recipient_id === currentSelected.auth_user_id
-              ))
-            );
+              : // Viewing another staff: normal two-way
+                (newMsg.sender_id === user.id && newMsg.recipient_id === currentSelected.auth_user_id) ||
+                (newMsg.sender_id === currentSelected.auth_user_id && newMsg.recipient_id === user.id);
 
-          if (isCurrentConvo) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-          } else if (newMsg.sender_id !== user.id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)) {
-            // Message from another contact -> increment unread count for that sender
+            if (isCurrentConvo) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
+              return;
+            }
+          }
+
+          // Not in current view — increment unread
+          if (newMsg.sender_id !== user.id && (newMsg.recipient_id === user.id || !newMsg.recipient_id)) {
             setUnreadCounts((prev) => ({
               ...prev,
               [newMsg.sender_id]: (prev[newMsg.sender_id] || 0) + 1,
@@ -193,24 +181,23 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     };
   }, [user?.id, isStudent]);
 
-  // Fetch messages with the selected contact
+  // Fetch messages when contact changes
   const fetchMessages = async (contact: ChatUser) => {
     if (!user || !contact) return;
 
     try {
       const isViewingStudent =
-        !isStudent && (contact.role || "").toLowerCase() === "student";
+        !isStudent && normalizeRole(contact.role) === "student";
 
       let query;
       if (isStudent) {
-        // Students: fetch ALL messages they sent or received (from any staff member)
-        // so they never miss a message regardless of which contact is selected
+        // Student: fetch ALL their messages (sent or received) — unified thread
         query = supabase
           .from("chat_messages")
           .select("*")
           .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`);
       } else if (isViewingStudent) {
-        // Staff supervision: show ALL messages where this student is sender or recipient
+        // Staff viewing a student: all messages involving that student
         query = supabase
           .from("chat_messages")
           .select("*")
@@ -218,7 +205,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
             `sender_id.eq.${contact.auth_user_id},recipient_id.eq.${contact.auth_user_id}`
           );
       } else {
-        // Normal two-way thread between current user and contact
+        // Staff-to-staff: normal two-way thread
         query = supabase
           .from("chat_messages")
           .select("*")
@@ -235,7 +222,6 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
       }
 
       setMessages(data || []);
-      // Clear unread for this contact
       setUnreadCounts((prev) => {
         const next = { ...prev };
         delete next[contact.auth_user_id];
@@ -305,8 +291,14 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     return contact.name || contact.email || "User";
   };
 
+  // Look up a user by auth_user_id from allUsers cache
+  const getUserById = (id: string): ChatUser | undefined => {
+    return allUsers.find(u => u.auth_user_id === id);
+  };
+
   const getRoleBadge = (role: string | null) => {
-    switch (role) {
+    const r = normalizeRole(role);
+    switch (r) {
       case "admin":
         return <Badge className="bg-red-500/15 text-red-600 hover:bg-red-500/20 text-xs">Admin</Badge>;
       case "ultimate_tutor":
@@ -316,6 +308,61 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
       default:
         return <Badge variant="secondary" className="text-xs">Student</Badge>;
     }
+  };
+
+  /**
+   * Determine which side a message appears on.
+   *
+   * UNIFIED SUPPORT CHANNEL LOGIC:
+   * - Student view: Student's own messages → RIGHT. All staff messages → LEFT (as "Tutor").
+   * - Staff viewing a student: Student's messages → LEFT. Any staff message → RIGHT (unified "our side").
+   * - Staff viewing another staff: Normal — own messages RIGHT, other's LEFT.
+   */
+  const isMessageOnRight = (msg: ChatMessage): boolean => {
+    if (isStudent) {
+      // Student: own messages on right, everything else on left
+      return msg.sender_id === user?.id;
+    }
+
+    // Staff member viewing
+    if (selectedContact && normalizeRole(selectedContact.role) === "student") {
+      // Viewing a student: student's messages on LEFT, all staff messages on RIGHT
+      return msg.sender_id !== selectedContact.auth_user_id;
+    }
+
+    // Staff-to-staff: own messages on right
+    return msg.sender_id === user?.id;
+  };
+
+  /**
+   * Get the display initials for a message bubble.
+   */
+  const getMessageInitials = (msg: ChatMessage, onRight: boolean): string => {
+    if (isStudent) {
+      if (onRight) {
+        return (userProfile?.name || "Me").slice(0, 2).toUpperCase();
+      }
+      // Staff message — show "T" for Tutor (unified)
+      return "T";
+    }
+
+    // Staff view
+    if (onRight) {
+      // This is a staff message — could be from self or another staff member
+      if (msg.sender_id === user?.id) {
+        return (userProfile?.name || "Me").slice(0, 2).toUpperCase();
+      }
+      // Another staff member sent this
+      const sender = getUserById(msg.sender_id);
+      if (sender) return getContactName(sender).slice(0, 2).toUpperCase();
+      return "ST";
+    }
+
+    // Left side = selected contact (student)
+    if (selectedContact) {
+      return getContactName(selectedContact).slice(0, 2).toUpperCase();
+    }
+    return "??";
   };
 
   return (
@@ -330,8 +377,8 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
             {isStudent ? "Tutors" : "Conversations"}
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            {isStudent 
-              ? "Ask questions or get help directly from tutors & admins!" 
+            {isStudent
+              ? "Ask questions or get help directly from tutors & admins!"
               : "Help students, supervise chats, and answer questions."}
           </p>
         </div>
@@ -425,28 +472,48 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
                   <h4 className="font-semibold text-sm mb-1">Start a conversation</h4>
                   <p className="text-xs text-muted-foreground max-w-sm">
                     {isStudent
-                      ? `Send a message to ${getContactName(selectedContact)} to ask for assistance, feedback, or guidance.`
+                      ? "Send a message to get help from your tutors. All your tutors and admins can see and reply."
                       : `Send a reply or check in on ${getContactName(selectedContact)}'s learning journey.`}
                   </p>
                 </div>
               ) : (
                 messages.map((msg) => {
-                  const isMine = msg.sender_id === user?.id;
+                  const onRight = isMessageOnRight(msg);
+                  const initials = getMessageInitials(msg, onRight);
                   const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+                  // For staff viewing a student: show which staff member sent a "right side" message
+                  let staffLabel: string | null = null;
+                  if (!isStudent && selectedContact && normalizeRole(selectedContact.role) === "student" && onRight) {
+                    if (msg.sender_id === user?.id) {
+                      staffLabel = "You";
+                    } else {
+                      const sender = getUserById(msg.sender_id);
+                      if (sender) {
+                        staffLabel = getContactName(sender);
+                      }
+                    }
+                  }
+
                   return (
                     <div
                       key={msg.id}
-                      className={`flex gap-3 ${isMine ? "flex-row-reverse" : "flex-row"}`}
+                      className={`flex gap-3 ${onRight ? "flex-row-reverse" : "flex-row"}`}
                     >
                       <Avatar className="w-8 h-8 shrink-0">
-                        <AvatarFallback className={isMine ? "bg-primary text-primary-foreground text-xs" : "bg-muted text-xs font-bold"}>
-                          {isMine ? (userProfile?.name || "Me").slice(0, 2).toUpperCase() : getContactName(selectedContact).slice(0, 2).toUpperCase()}
+                        <AvatarFallback className={onRight ? "bg-primary text-primary-foreground text-xs" : "bg-muted text-xs font-bold"}>
+                          {initials}
                         </AvatarFallback>
                       </Avatar>
-                      <div className={`max-w-[75%] ${isMine ? "items-end" : "items-start"}`}>
+                      <div className={`max-w-[75%] ${onRight ? "items-end" : "items-start"}`}>
+                        {staffLabel && (
+                          <span className={`text-[10px] text-muted-foreground mb-0.5 px-1 block ${onRight ? "text-right" : ""}`}>
+                            {staffLabel}
+                          </span>
+                        )}
                         <div
                           className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm ${
-                            isMine
+                            onRight
                               ? "bg-primary text-primary-foreground rounded-tr-none"
                               : "bg-card border border-border text-foreground rounded-tl-none"
                           }`}
@@ -484,8 +551,8 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
                   disabled={sending}
                   className="flex-1 text-sm h-10"
                 />
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={!inputMessage.trim() || sending}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 h-10 px-4"
                 >
