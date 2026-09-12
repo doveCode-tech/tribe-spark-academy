@@ -18,9 +18,17 @@ import {
   Play, 
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   Clock,
   HelpCircle
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ActivityCodeEditor, EditorType } from "./ActivityCodeEditor";
 import { Code2, Sparkles, ArrowRight } from "lucide-react";
@@ -75,6 +83,7 @@ export function CourseAccordionLessons({
   // Default the first unlocked item to open
   const firstUnlocked = lessons.find((_, i) => i === 0 || lessons[i - 1]?.completed);
   const defaultOpen = firstUnlocked ? firstUnlocked.id : (lessons[0]?.id || "");
+  const [activeAccordion, setActiveAccordion] = useState<string>(defaultOpen);
 
   const handleOpenVideo = (title: string, url: string, isYoutube = false) => {
     setActiveVideoModal({ title, url, isYoutube });
@@ -122,10 +131,10 @@ export function CourseAccordionLessons({
         </DialogContent>
       </Dialog>
 
-      {/* Activity Code Editor & Blueprint Modal */}
+      {/* Activity Code Editor & Blueprint Modal - Fit to screen view without scrolling */}
       <Dialog open={!!activeActivityModal} onOpenChange={(open) => !open && setActiveActivityModal(null)}>
-        <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader className="pb-2 border-b">
+        <DialogContent className="sm:max-w-[95vw] w-[95vw] max-h-[96vh] h-[96vh] flex flex-col p-4 sm:p-5 overflow-hidden">
+          <DialogHeader className="pb-2 border-b shrink-0">
             <div className="flex items-center gap-2">
               <Code2 className="w-5 h-5 text-primary" />
               <DialogTitle className="text-lg">
@@ -137,7 +146,7 @@ export function CourseAccordionLessons({
             </div>
           </DialogHeader>
           {activeActivityModal && (
-            <div className="pt-2">
+            <div className="pt-2 flex-1 min-h-0 overflow-hidden">
               <ActivityCodeEditor
                 exercise={{
                   ...activeActivityModal.exercise,
@@ -152,8 +161,14 @@ export function CourseAccordionLessons({
         </DialogContent>
       </Dialog>
 
-      {/* Accordion Component */}
-      <Accordion type="single" collapsible defaultValue={defaultOpen} className="space-y-3">
+      {/* Accordion Component - controlled */}
+      <Accordion
+        type="single"
+        collapsible
+        value={activeAccordion}
+        onValueChange={(val) => setActiveAccordion(val || "")}
+        className="space-y-3"
+      >
         {lessons.map((lesson, index) => {
           const isFirstLesson = index === 0;
           const previousCompleted = index > 0 ? lessons[index - 1].completed : true;
@@ -502,6 +517,72 @@ export function CourseAccordionLessons({
                         Lesson Completed
                       </div>
                     )}
+                  </div>
+
+                  {/* Previous / Jump To / Next Lesson Navigation Bar (Matching Reference Image) */}
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                    {/* Previous Lesson Button */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={index === 0}
+                      onClick={() => {
+                        if (index > 0) {
+                          setActiveAccordion(lessons[index - 1].id);
+                        }
+                      }}
+                      className="bg-slate-700 hover:bg-slate-800 text-white text-xs h-9 px-3 gap-1.5 shadow-sm disabled:opacity-40"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span className="truncate max-w-[140px] sm:max-w-[200px]">
+                        {index > 0 ? lessons[index - 1].title : "First Lesson"}
+                      </span>
+                    </Button>
+
+                    {/* Jump To Dropdown Selector */}
+                    <div className="w-48 sm:w-64">
+                      <Select
+                        value={lesson.id}
+                        onValueChange={(selectedId) => setActiveAccordion(selectedId)}
+                      >
+                        <SelectTrigger className="h-9 text-xs bg-background border-border">
+                          <SelectValue placeholder="Jump to..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lessons.map((l, lIdx) => {
+                            const isLUnlocked = canEdit || lIdx === 0 || lessons[lIdx - 1]?.completed;
+                            return (
+                              <SelectItem
+                                key={l.id}
+                                value={l.id}
+                                disabled={!isLUnlocked}
+                                className="text-xs"
+                              >
+                                {l.order_index || lIdx + 1}. {l.title}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Next Lesson Button */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={index >= lessons.length - 1}
+                      onClick={() => {
+                        if (index < lessons.length - 1) {
+                          setActiveAccordion(lessons[index + 1].id);
+                        }
+                      }}
+                      className="bg-slate-700 hover:bg-slate-800 text-white text-xs h-9 px-3 gap-1.5 shadow-sm disabled:opacity-40"
+                    >
+                      <span className="truncate max-w-[140px] sm:max-w-[200px]">
+                        {index < lessons.length - 1 ? lessons[index + 1].title : "Last Lesson"}
+                      </span>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               </AccordionContent>

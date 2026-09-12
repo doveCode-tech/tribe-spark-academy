@@ -23,6 +23,8 @@ import {
   Layout,
   Plus,
   X,
+  Download,
+  Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -404,6 +406,27 @@ export function ActivityCodeEditor({
   const isDebugMode = projectMode === "debug";
   const currentFile = files.find((f) => f.name === activeFile) || files[0];
 
+  // ── Auto-run state ──────────────────────────────────────────────────────────
+  const [autoRun, setAutoRun] = useState(false);
+  const autoRunTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Resizable split pane ────────────────────────────────────────────────────
+  const [splitPercent, setSplitPercent] = useState(55); // editor gets 55%, preview 45%
+  const splitDragRef = useRef(false);
+
+  // ── Step-by-step instructions ──────────────────────────────────────────────
+  const instructionText = exercise.instructions || blueprint.instructions;
+  const instructionSteps = (() => {
+    // Split instructions by numbered steps, ### headers, or double-newlines
+    const byNumbers = instructionText.split(/(?=(?:^|\n)\s*(?:\d+[\.\)]\s|Step\s+\d+|###\s))/i).filter(s => s.trim());
+    if (byNumbers.length > 1) return byNumbers.map(s => s.trim());
+    const byDoubleNl = instructionText.split(/\n\s*\n/).filter(s => s.trim());
+    if (byDoubleNl.length > 1) return byDoubleNl.map(s => s.trim());
+    return [instructionText.trim()];
+  })();
+  const [currentStep, setCurrentStep] = useState(0);
+  const hasMultipleSteps = instructionSteps.length > 1;
+
   // Sync storage when files change
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(files));
@@ -540,6 +563,64 @@ export function ActivityCodeEditor({
       doc.write(previewSrc);
       doc.close();
     }, 60);
+  };
+
+  // ── Auto-run: debounced execution on code change ─────────────────────────────
+  useEffect(() => {
+    if (!autoRun) return;
+    if (autoRunTimerRef.current) clearTimeout(autoRunTimerRef.current);
+    autoRunTimerRef.current = setTimeout(() => {
+      handleRun();
+    }, 600);
+    return () => { if (autoRunTimerRef.current) clearTimeout(autoRunTimerRef.current); };
+  }, [autoRun, files, activeFile]);
+
+  // ── Download project ────────────────────────────────────────────────────────
+  const handleDownload = () => {
+    if (files.length === 1) {
+      // Single file: download directly
+      const f = files[0];
+      const blob = new Blob([f.content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = f.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      // Multiple files: combine into a single HTML with all CSS/JS inline
+      const combined = buildHtmlOutput(files);
+      const blob = new Blob([combined], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "project.html";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    soundEffects.playChime();
+    toast({ title: "Downloaded! 📥", description: "Your project files have been downloaded." });
+  };
+
+  // ── Resizable split pane handlers ──────────────────────────────────────────
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const handleSplitMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragRef.current = true;
+    const onMove = (ev: MouseEvent) => {
+      if (!splitDragRef.current || !splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const offsetX = ev.clientX - rect.left;
+      const pct = Math.min(80, Math.max(20, (offsetX / rect.width) * 100));
+      setSplitPercent(pct);
+    };
+    const onUp = () => {
+      splitDragRef.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────────
@@ -808,12 +889,12 @@ export function ActivityCodeEditor({
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Button
             size="sm"
             variant="ghost"
             onClick={handleCopyLink}
-            className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1"
+            className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1 px-2"
             title="Copy unique project link"
           >
             {copiedLink ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -822,8 +903,18 @@ export function ActivityCodeEditor({
           <Button
             size="sm"
             variant="ghost"
+            onClick={handleDownload}
+            className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1 px-2"
+            title="Download project files"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Download</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             onClick={handleReset}
-            className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1"
+            className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1 px-2"
             title="Reset code to starter template"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -833,7 +924,7 @@ export function ActivityCodeEditor({
             size="sm"
             onClick={handleSave}
             disabled={saving}
-            className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1 px-3 shadow-sm"
+            className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1 px-2.5 shadow-sm"
           >
             <Save className="w-3.5 h-3.5" />
             <span>{saving ? "Saved!" : "Save"}</span>
@@ -843,16 +934,40 @@ export function ActivityCodeEditor({
               size="sm"
               onClick={handleSubmit}
               disabled={submitting}
-              className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 px-3 shadow-sm"
+              className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 px-2.5 shadow-sm"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{submitting ? "Sending..." : "Submit"}</span>
             </Button>
           )}
+
+          {/* Auto-Run toggle button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const next = !autoRun;
+              setAutoRun(next);
+              if (next) {
+                handleRun();
+                toast({ title: "Auto-Run Enabled ⚡", description: "Code will automatically re-run as you type." });
+              }
+            }}
+            className={`h-8 text-xs gap-1 px-2 border transition-colors ${
+              autoRun
+                ? "bg-emerald-950/80 border-emerald-500 text-emerald-300 hover:bg-emerald-900"
+                : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+            }`}
+            title="Automatically run code on edits"
+          >
+            <Zap className={`w-3.5 h-3.5 ${autoRun ? "fill-emerald-400 text-emerald-400" : ""}`} />
+            <span>Auto</span>
+          </Button>
+
           <Button
             size="sm"
             onClick={handleRun}
-            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 px-3.5 shadow-sm"
+            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 px-3 shadow-sm"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>Run</span>
@@ -860,14 +975,19 @@ export function ActivityCodeEditor({
         </div>
       </div>
 
-      {/* Editor + Preview split pane */}
+      {/* Editor + Preview split pane with fit-to-view height and resizable divider */}
       <div
-        className="flex border border-slate-800 rounded-b-xl overflow-hidden shadow-xl bg-slate-950"
-        style={{ height: editorAreaHeight }}
+        ref={splitContainerRef}
+        className="flex border border-slate-800 rounded-b-xl overflow-hidden shadow-xl bg-slate-950 relative"
+        style={{
+          height: fullscreen ? "calc(100vh - 106px)" : "calc(82vh - 130px)",
+          minHeight: "420px",
+          maxHeight: fullscreen ? "none" : "680px"
+        }}
       >
-        {/* Instructions panel */}
+        {/* Step-by-Step Guidance Side Panel */}
         {instructionsOpen && (
-          <div className="w-72 border-r border-slate-800 bg-slate-900/95 flex flex-col shrink-0 text-slate-200">
+          <div className="w-72 md:w-80 border-r border-slate-800 bg-slate-900/95 flex flex-col shrink-0 text-slate-200">
             <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Layout className="w-3.5 h-3.5 text-blue-400" />
@@ -882,12 +1002,50 @@ export function ActivityCodeEditor({
                 <ChevronLeft className="w-4 h-4" />
               </Button>
             </div>
+
+            {/* Instruction content: paginated if multiple steps, or single view */}
             <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3">
-              <p className="font-semibold text-blue-300 text-sm">{exercise.title}</p>
-              <div className="whitespace-pre-wrap text-slate-300 font-sans">
-                {exercise.instructions || blueprint.instructions}
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-blue-300 text-sm">{exercise.title}</p>
+                {hasMultipleSteps && (
+                  <Badge variant="outline" className="text-[10px] text-blue-300 border-blue-500/30">
+                    Step {currentStep + 1} of {instructionSteps.length}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="whitespace-pre-wrap text-slate-300 font-sans leading-relaxed bg-slate-950/40 p-3 rounded-lg border border-slate-800/80">
+                {hasMultipleSteps ? instructionSteps[currentStep] : instructionText}
               </div>
             </div>
+
+            {/* Step navigation buttons when there are multiple steps */}
+            {hasMultipleSteps && (
+              <div className="p-2.5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={currentStep === 0}
+                  onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
+                  className="h-7 text-xs px-2.5 text-slate-300 border-slate-700 bg-slate-900 hover:bg-slate-800 gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Previous</span>
+                </Button>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {currentStep + 1} / {instructionSteps.length}
+                </span>
+                <Button
+                  size="sm"
+                  disabled={currentStep >= instructionSteps.length - 1}
+                  onClick={() => setCurrentStep((s) => Math.min(instructionSteps.length - 1, s + 1))}
+                  className="h-7 text-xs px-2.5 bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -901,8 +1059,14 @@ export function ActivityCodeEditor({
           </button>
         )}
 
-        {/* Monaco Editor */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]">
+        {/* Monaco Editor Center (resizable width if previewOpen) */}
+        <div
+          className="flex flex-col min-w-0 bg-[#1e1e1e]"
+          style={{
+            flex: previewOpen ? `${splitPercent} 1 0%` : "1 1 0%",
+            width: previewOpen ? `${splitPercent}%` : "100%",
+          }}
+        >
           <Editor
             height="100%"
             language={currentFile.language}
@@ -941,10 +1105,27 @@ export function ActivityCodeEditor({
           />
         </div>
 
-        {/* Live Preview / Output pane — always rendered when previewOpen */}
+        {/* Resizable Divider Handle (appears when preview is open) */}
         {previewOpen && (
-          <div className="w-80 md:w-96 border-l border-slate-800 flex flex-col bg-slate-900 shrink-0">
-            <div className="p-2.5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+          <div
+            onMouseDown={handleSplitMouseDown}
+            className="w-1.5 bg-slate-800 hover:bg-blue-500 active:bg-blue-600 cursor-col-resize shrink-0 transition-colors flex items-center justify-center group"
+            title="Drag to resize editor & preview"
+          >
+            <div className="h-6 w-0.5 bg-slate-600 group-hover:bg-white rounded" />
+          </div>
+        )}
+
+        {/* Live Preview / Output pane — resizable */}
+        {previewOpen && (
+          <div
+            className="border-l border-slate-800 flex flex-col bg-slate-900 shrink-0 min-w-[240px]"
+            style={{
+              flex: `${100 - splitPercent} 1 0%`,
+              width: `${100 - splitPercent}%`,
+            }}
+          >
+            <div className="p-2 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 font-mono">
                 <Play className="w-3 h-3 text-emerald-400" />
                 {isHtmlMode ? "LIVE PREVIEW" : "TERMINAL / OUTPUT"}

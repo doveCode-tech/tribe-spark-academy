@@ -28,38 +28,39 @@ export function NotificationsBell() {
 
   const load = async () => {
     try {
+      const userRole = (userProfile?.role || "").toLowerCase();
+      const userId = userProfile?.auth_user_id;
+
       if (isAdmin) {
-        // For admins, get only unresolved enrollment requests using the new function
-        const { data: enrollmentData, error: enrollmentError } = await supabase
+        // For admins, get unresolved enrollment requests
+        const { data: enrollmentData } = await supabase
           .rpc('get_unresolved_enrollment_notifications');
-        
-        if (enrollmentError) throw enrollmentError;
-        
-        // Also get other admin notifications
+
+        // Get admin-targeted and activity notifications
         const { data: otherData, error: otherError } = await supabase
           .from('notifications')
           .select('*')
           .neq('type', 'enrollment_request')
-          .or(`recipient_role.eq.admin,recipient_user_id.eq.${userProfile?.auth_user_id}`)
+          .or(`recipient_role.eq.admin,recipient_role.eq.tutor,recipient_user_id.eq.${userId}`)
           .order('created_at', { ascending: false })
-          .limit(25);
-          
+          .limit(30);
+
         if (otherError) throw otherError;
-        
-        // Combine and sort results
+
         const combined = [...(enrollmentData || []), ...(otherData || [])]
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .slice(0, 25);
-        
+          .slice(0, 30);
+
         setItems(combined as any);
       } else {
-        // For regular users, get their notifications
+        // For tutors and students, fetch direct and role-targeted notifications
+        const roleFilter = userRole ? `,recipient_role.eq.${userRole}` : '';
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .eq('recipient_user_id', userProfile?.auth_user_id)
+          .or(`recipient_user_id.eq.${userId}${roleFilter}`)
           .order('created_at', { ascending: false })
-          .limit(25);
+          .limit(30);
 
         if (error) throw error;
         setItems(data as any);
@@ -75,8 +76,10 @@ export function NotificationsBell() {
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         const newNotif = payload.new as any;
+        const userRole = (userProfile?.role || "").toLowerCase();
         const forMe = newNotif?.recipient_user_id === userProfile?.auth_user_id || 
-                      (isAdmin && newNotif?.recipient_role === 'admin');
+                      (newNotif?.recipient_role && newNotif.recipient_role === userRole) ||
+                      (isAdmin && (newNotif?.recipient_role === 'admin' || newNotif?.recipient_role === 'tutor'));
         if (forMe) {
           soundEffects.playChime();
         }
@@ -96,7 +99,7 @@ export function NotificationsBell() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, userProfile?.auth_user_id]);
+  }, [isAdmin, userProfile?.auth_user_id, userProfile?.role]);
 
   const markRead = async (id: string) => {
     const prev = items;
@@ -229,20 +232,35 @@ export function NotificationsBell() {
         {items.length === 0 && (
           <div className="py-6 text-center text-muted-foreground text-sm">No notifications</div>
         )}
-        {items.map((n) => (
-          <div key={n.id} className="px-2 py-2 border-b last:border-b-0">
+        <div className="max-h-[380px] overflow-y-auto divide-y divide-border">
+        {items.map((n) => {
+          const timeAgo = (() => {
+            if (!n.created_at) return '';
+            const diffMin = Math.round((Date.now() - new Date(n.created_at).getTime()) / 60000);
+            if (diffMin < 1) return 'just now';
+            if (diffMin < 60) return `${diffMin}m ago`;
+            const diffHr = Math.round(diffMin / 60);
+            if (diffHr < 24) return `${diffHr}h ago`;
+            return `${Math.round(diffHr / 24)}d ago`;
+          })();
+
+          return (
+          <div key={n.id} className={`px-3 py-2.5 transition-colors ${!n.read ? 'bg-primary/5' : 'hover:bg-muted/40'}`}>
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="font-medium">{n.title}</div>
-                <div className="text-sm text-muted-foreground">{n.message}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-semibold text-xs text-foreground">{n.title}</span>
+                  {timeAgo && <span className="text-[10px] text-muted-foreground">· {timeAgo}</span>}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed break-words">{n.message}</div>
                 {n.type === 'user_signup' && n.data && (
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-[11px] text-muted-foreground mt-1">
                     User: {n.data.user_name} ({n.data.user_email})
                   </div>
                 )}
               </div>
               {!n.read && (
-                <Badge variant="outline">new</Badge>
+                <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 shrink-0">new</Badge>
               )}
             </div>
             {isAdmin && n.type === 'enrollment_request' && (
@@ -273,7 +291,9 @@ export function NotificationsBell() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

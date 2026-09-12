@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Search, Users, UserPlus, UserMinus, CheckCircle2, Clock } from "lucide-react";
+import { Search, Users, UserPlus, UserMinus, CheckCircle2, Clock, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { createNotification } from "@/utils/notifications";
+import { StudentDetailDialog } from "@/components/StudentDetailDialog";
 
 interface Participant {
   enrollment_id: string;
@@ -52,6 +53,7 @@ export function CourseParticipantsDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"participants" | "add">("participants");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<{ id: string; name: string } | null>(null);
 
   const { userProfile } = useAuth();
   const { toast } = useToast();
@@ -337,18 +339,33 @@ export function CourseParticipantsDialog({
                     </div>
                   </div>
 
-                  {canManage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUnenrollStudent(p.enrollment_id, p.student_id)}
-                      disabled={actionLoading === p.enrollment_id}
-                      className="text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 gap-1 shrink-0"
-                    >
-                      <UserMinus className="w-3.5 h-3.5" />
-                      Unenroll
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {canManage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedStudent({ id: p.student_id, name: p.name })}
+                        className="text-xs text-primary hover:text-primary hover:bg-primary/10 h-8 gap-1"
+                        title="View Full Student Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Details</span>
+                      </Button>
+                    )}
+
+                    {canManage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUnenrollStudent(p.enrollment_id, p.student_id)}
+                        disabled={actionLoading === p.enrollment_id}
+                        className="text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 gap-1"
+                      >
+                        <UserMinus className="w-3.5 h-3.5" />
+                        Unenroll
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))
             )
@@ -394,6 +411,16 @@ export function CourseParticipantsDialog({
           )}
         </div>
       </DialogContent>
+
+      {/* Student Detail Modal */}
+      {selectedStudent && (
+        <StudentDetailDialog
+          studentId={selectedStudent.id}
+          studentName={selectedStudent.name}
+          open={!!selectedStudent}
+          onOpenChange={(openState) => !openState && setSelectedStudent(null)}
+        />
+      )}
     </Dialog>
   );
 }
