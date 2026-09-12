@@ -6,6 +6,7 @@ import { Bell, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { soundEffects } from "@/utils/audio";
 
 interface NotificationRow {
   id: string;
@@ -72,7 +73,13 @@ export function NotificationsBell() {
     load();
     const channel = supabase
       .channel('schema-db-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
+        const newNotif = payload.new as any;
+        const forMe = newNotif?.recipient_user_id === userProfile?.auth_user_id || 
+                      (isAdmin && newNotif?.recipient_role === 'admin');
+        if (forMe) {
+          soundEffects.playChime();
+        }
         load();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => {

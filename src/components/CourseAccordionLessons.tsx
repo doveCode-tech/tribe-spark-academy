@@ -22,6 +22,8 @@ import {
   HelpCircle
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ActivityCodeEditor, EditorType } from "./ActivityCodeEditor";
+import { Code2, Sparkles, ArrowRight } from "lucide-react";
 
 export interface CourseLesson {
   id: string;
@@ -57,6 +59,18 @@ export function CourseAccordionLessons({
 }: CourseAccordionLessonsProps) {
   const navigate = useNavigate();
   const [activeVideoModal, setActiveVideoModal] = useState<{ title: string; url: string; isYoutube?: boolean } | null>(null);
+  const [activeActivityModal, setActiveActivityModal] = useState<{ exercise: any; lesson: CourseLesson } | null>(null);
+
+  const inferEditorType = (exercise: any, lessonTitle: string): EditorType => {
+    if (exercise.editor_type && exercise.editor_type !== "none") return exercise.editor_type;
+    const str = `${exercise.title || ""} ${exercise.description || ""} ${lessonTitle || ""}`.toLowerCase();
+    if (str.includes("python")) return "monaco_python";
+    if (str.includes("scratch")) return "scratch";
+    if (str.includes("roblox") || str.includes("app")) return "external";
+    if (str.includes("javascript") || str.includes("js")) return "monaco_js";
+    if (str.includes("html") || str.includes("web") || str.includes("css") || str.includes("design")) return "monaco_html";
+    return "monaco_html"; // default template
+  };
 
   // Default the first unlocked item to open
   const firstUnlocked = lessons.find((_, i) => i === 0 || lessons[i - 1]?.completed);
@@ -105,6 +119,36 @@ export function CourseAccordionLessons({
               />
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Activity Code Editor & Blueprint Modal */}
+      <Dialog open={!!activeActivityModal} onOpenChange={(open) => !open && setActiveActivityModal(null)}>
+        <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="pb-2 border-b">
+            <div className="flex items-center gap-2">
+              <Code2 className="w-5 h-5 text-primary" />
+              <DialogTitle className="text-lg">
+                {activeActivityModal?.exercise?.title || "Lesson Activity"}
+              </DialogTitle>
+              <Badge variant="outline" className="text-xs">
+                {activeActivityModal?.exercise?.type || "Activity"}
+              </Badge>
+            </div>
+          </DialogHeader>
+          {activeActivityModal && (
+            <div className="pt-2">
+              <ActivityCodeEditor
+                exercise={{
+                  ...activeActivityModal.exercise,
+                  editor_type: inferEditorType(activeActivityModal.exercise, activeActivityModal.lesson.title),
+                }}
+                lessonId={activeActivityModal.lesson.id}
+                courseId={courseId}
+                isAssignment={activeActivityModal.exercise.is_assignment}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -341,32 +385,50 @@ export function CourseAccordionLessons({
                         </div>
                       ))}
 
-                      {/* Exercise List */}
-                      {exercisesList.map((exercise: any, exIdx: number) => (
-                        <div
-                          key={`ex-${exIdx}`}
-                          className="flex items-center justify-between p-2.5 rounded-md bg-card border border-border/40"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 font-bold text-xs">
-                              {exIdx + 1}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-foreground">
-                                {exercise.title || `Exercise ${exIdx + 1}`}
-                              </p>
-                              {exercise.description && (
-                                <p className="text-xs text-muted-foreground line-clamp-1">
-                                  {exercise.description}
+                      {/* Exercise List - Interactive & Clickable */}
+                      {exercisesList.map((exercise: any, exIdx: number) => {
+                        const isVideoActivity = exercise.type === "video" || exercise.title?.toLowerCase().includes("video");
+                        return (
+                          <div
+                            key={`ex-${exIdx}`}
+                            onClick={() => {
+                              if (isVideoActivity && lesson.video_urls?.length) {
+                                handleOpenVideo(exercise.title || `Video #${exIdx + 1}`, lesson.video_urls[0], false);
+                              } else {
+                                setActiveActivityModal({ exercise, lesson });
+                              }
+                            }}
+                            className="flex items-center justify-between p-3 rounded-lg bg-card border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group shadow-sm"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-600 group-hover:bg-primary group-hover:text-primary-foreground transition-colors flex items-center justify-center shrink-0 font-bold text-xs">
+                                {exIdx + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                  {exercise.title || `Exercise ${exIdx + 1}`}
                                 </p>
-                              )}
+                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                  {exercise.description || "Click to open interactive workspace and instructions"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              <Badge variant="outline" className="text-xs capitalize bg-background">
+                                {exercise.type || "practice"}
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-primary group-hover:bg-primary group-hover:text-primary-foreground gap-1 hidden sm:flex"
+                              >
+                                <span>Open</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </Button>
                             </div>
                           </div>
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            {exercise.type || "Practice"}
-                          </Badge>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 

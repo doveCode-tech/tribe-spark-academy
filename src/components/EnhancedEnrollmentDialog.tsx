@@ -8,6 +8,7 @@ import { Search, UserPlus, UserMinus, UserX, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { createNotification } from "@/utils/notifications";
 
 interface User {
   id: string;
@@ -128,6 +129,13 @@ export function EnhancedEnrollmentDialog({ course, triggerLabel = "Manage Enroll
       }
       
       setEnrolledUsers([...enrolledUsers, userId]);
+      createNotification({
+        recipientUserId: userId,
+        type: 'course_enrollment',
+        title: `Enrolled in ${course.title}`,
+        message: `You have been enrolled in "${course.title}". Head to your dashboard to start learning!`,
+        data: { course_id: course.id },
+      });
       toast({ title: 'Success', description: 'User enrolled successfully' });
     } catch (e: any) {
       console.error('Error enrolling user:', e);

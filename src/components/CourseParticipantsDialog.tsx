@@ -9,6 +9,7 @@ import { Search, Users, UserPlus, UserMinus, CheckCircle2, Clock } from "lucide-
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { createNotification } from "@/utils/notifications";
 
 interface Participant {
   enrollment_id: string;
@@ -162,6 +163,14 @@ export function CourseParticipantsDialog({
         });
 
       if (error) throw error;
+
+      createNotification({
+        recipientUserId: studentAuthId,
+        type: 'course_enrollment',
+        title: `Enrolled in ${courseTitle}`,
+        message: `You have been enrolled in "${courseTitle}". Check your courses to begin!`,
+        data: { course_id: courseId },
+      });
 
       toast({
         title: "Student Enrolled",

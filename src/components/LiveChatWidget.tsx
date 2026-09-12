@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { LiveChat } from "./LiveChat";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { soundEffects } from "@/utils/audio";
 
 export function LiveChatWidget() {
   const { user, userProfile } = useAuth();
@@ -30,8 +31,11 @@ export function LiveChatWidget() {
           const isForMe =
             newMsg.sender_id !== user.id &&
             (newMsg.recipient_id === user.id || !newMsg.recipient_id);
-          if (isForMe && !isOpen) {
-            setUnreadCount((prev) => prev + 1);
+          if (isForMe) {
+            soundEffects.playChime();
+            if (!isOpen) {
+              setUnreadCount((prev) => prev + 1);
+            }
           }
         }
       )

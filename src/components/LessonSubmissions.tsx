@@ -11,6 +11,8 @@ import { ExternalLink, FileText, CheckCircle, Loader2, Code2, Eye } from "lucide
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { soundEffects } from "@/utils/audio";
+import { createNotification } from "@/utils/notifications";
 
 type Filter = "all" | "requires_grading" | "submitted" | "not_submitted";
 
@@ -123,6 +125,20 @@ export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps
         .update({ grade: parseInt(grade), feedback: feedback || null, review_status: "graded" })
         .eq("id", submissionId);
       if (error) throw error;
+
+      soundEffects.playSuccess();
+
+      const targetSub = submissions.find(s => s.id === submissionId);
+      if (targetSub?.student_id) {
+        createNotification({
+          recipientUserId: targetSub.student_id,
+          type: 'project_graded',
+          title: `Project Graded: ${targetSub.title || 'Assignment'}`,
+          message: `Your work has been graded: ${grade}/100.${feedback ? ` Feedback: ${feedback}` : ''}`,
+          data: { project_id: submissionId, course_id: courseId, lesson_id: lessonId },
+        });
+      }
+
       toast({ title: "Graded!", description: "Grade saved successfully." });
       setGradingId(null);
       setGrade("");

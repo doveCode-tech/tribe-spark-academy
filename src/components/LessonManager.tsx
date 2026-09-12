@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Video, BookOpen, Gamepad2, Trash2, Edit, Upload, X, AlertCircle, CheckCircle2, Trophy, GripVertical, Youtube, FileText, HardDrive, Code2, ExternalLink } from "lucide-react";
+import { Plus, Video, BookOpen, Gamepad2, Trash2, Edit, Upload, X, AlertCircle, CheckCircle2, Trophy, GripVertical, Youtube, FileText, HardDrive, Code2, ExternalLink, Sparkles, Bug } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -52,6 +52,10 @@ export function LessonManager({ courseId, category }: LessonManagerProps) {
   const [loading, setLoading] = useState(true);
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [selectedTrack, setSelectedTrack] = useState(category || 'web');
+  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const canEdit = userProfile?.role === 'admin' || userProfile?.role === 'tutor' || userProfile?.role === 'ultimate_tutor';
 
@@ -106,17 +110,23 @@ export function LessonManager({ courseId, category }: LessonManagerProps) {
     }
   };
 
-  const generateCourseLessons = async () => {
-    const courseContent = getCourseContent(category);
-    
+  const handleGenerateSubmit = async () => {
+    setGenerating(true);
     try {
+      if (replaceExisting && lessons.length > 0) {
+        await supabase.from('lessons').delete().eq('course_id', courseId);
+      }
+
+      const startingIndex = replaceExisting ? 0 : lessons.length;
+      const courseContent = getCourseContent(selectedTrack);
+
       const lessonsToInsert = courseContent.map((lesson, index) => ({
         course_id: courseId,
         title: lesson.title,
         description: lesson.description,
         content: lesson.content,
         duration_minutes: lesson.duration_minutes,
-        order_index: index + 1,
+        order_index: startingIndex + index + 1,
         video_urls: [],
         exercises: lesson.exercises,
         content_type: 'lesson',
@@ -127,127 +137,314 @@ export function LessonManager({ courseId, category }: LessonManagerProps) {
         quiz_data: lesson.quiz_data || null,
       }));
 
-      const { error } = await supabase
-        .from('lessons')
-        .insert(lessonsToInsert);
-
+      const { error } = await supabase.from('lessons').insert(lessonsToInsert);
       if (error) throw error;
 
       toast({
-        title: "Course Lessons Created",
-        description: `Created ${courseContent.length} lessons for ${category}. You can now edit and add videos.`,
+        title: "Curriculum Generated 🎉",
+        description: `Created ${courseContent.length} structured lessons with interactive coding activities.`,
       });
 
+      setGenerateDialogOpen(false);
       fetchLessons();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating lessons:', error);
       toast({
-        title: "Error",
-        description: "Failed to create lessons.",
+        title: "Generation Error",
+        description: error.message || "Failed to create lessons.",
         variant: "destructive",
       });
+    } finally {
+      setGenerating(false);
     }
   };
 
   const getCourseContent = (courseCategory: string) => {
-    const cat = courseCategory?.toLowerCase() || '';
+    const cat = (courseCategory || selectedTrack || '').toLowerCase();
     
     if (cat.includes('python')) return getPythonLessons();
     if (cat.includes('scratch')) return getScratchLessons();
     if (cat.includes('graphic') || cat.includes('design')) return getGraphicsDesignLessons();
+    if (cat.includes('roblox') || cat.includes('game')) return getRobloxLessons();
+    if (cat.includes('app') || cat.includes('mobile')) return getAppDevLessons();
     if (cat.includes('robot')) return getRoboticsLessons();
-    if (cat.includes('web') || cat.includes('html')) return getWebDevLessons();
     if (cat.includes('javascript') || cat.includes('js')) return getJavaScriptLessons();
     
-    return getGenericLessons(courseCategory);
+    return getWebDevLessons();
   };
 
-  const getPythonLessons = () => [
-    {
-      title: "Lesson 1: Introduction to Python",
-      description: "Learn what Python is and why it's one of the most popular programming languages",
-      content: "Welcome to Python! Python is a powerful, easy-to-learn programming language used by professionals worldwide.",
-      duration_minutes: 45,
-      exercises: [
-        { type: "video", title: "Lesson 1 Useful Video - What is Python?" },
-        { type: "interactive", title: "Lesson 1 Exercise - Python Interactive Example" },
-        { type: "practice", title: "Lesson 1 Exercise - Python Mathematical Operations" },
-      ],
-      assignment_required: true,
-      assignment_data: { title: "Lesson 1 Assignment: Python Strings", description: "Create a program using print statements" },
-      quiz_required: true,
-      quiz_data: { title: "Lesson 1 Quiz" },
-    },
-    ...Array.from({ length: 9 }, (_, i) => ({
-      title: `Lesson ${i + 2}: Python Concepts ${i + 2}`,
-      description: `Continue learning Python with new concepts`,
-      content: `Build on your Python knowledge with practical exercises.`,
-      duration_minutes: 45 + (i * 5),
-      exercises: [
-        { type: "video", title: `Lesson ${i + 2} Useful Video` },
-        { type: "interactive", title: `Lesson ${i + 2} Exercise - Interactive Example` },
-        { type: "practice", title: `Lesson ${i + 2} Exercise - Hands-on Practice` },
-      ],
-      assignment_required: true,
-      assignment_data: { title: `Lesson ${i + 2} Assignment`, description: `Complete the Python assignment` },
-      quiz_required: true,
-      quiz_data: { title: `Lesson ${i + 2} Quiz` },
-      is_end_of_course: i === 8,
-    })),
-  ];
-
-  const getScratchLessons = () => Array.from({ length: 10 }, (_, i) => ({
-    title: `Lesson ${i + 1}: ${i === 0 ? 'Introduction to Scratch' : i === 9 ? 'Final Project' : `Scratch Concepts ${i + 1}`}`,
-    description: `Learn Scratch programming through fun activities`,
-    content: `Discover visual programming with Scratch.`,
-    duration_minutes: i === 9 ? 90 : 40 + (i * 5),
+  const getWebDevLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: ${
+      i === 0 ? "Introduction to Web Design & HTML" :
+      i === 1 ? "HTML Tags, Headings & Text Formatting" :
+      i === 2 ? "Styling with CSS Colors & Fonts" :
+      i === 3 ? "CSS Box Model & Layouts" :
+      i === 4 ? "Building Interactive Buttons & Links" :
+      i === 5 ? "Flexbox & Responsive Design" :
+      i === 6 ? "HTML Forms & User Inputs" :
+      i === 7 ? "CSS Animations & Transitions" :
+      i === 8 ? "JavaScript DOM Manipulation" :
+      "Final Project: Portfolio Website"
+    }`,
+    description: `Master modern web development concepts with hands-on projects.`,
+    content: `In this lesson, you will build and style real web pages using HTML, CSS, and JavaScript.`,
+    duration_minutes: 45,
     exercises: [
-      { type: "video", title: `Lesson ${i + 1} Useful Video` },
-      { type: "interactive", title: `Lesson ${i + 1} Exercise - Interactive Example` },
-      { type: "practice", title: `Lesson ${i + 1} Exercise - Hands-on Practice` },
+      {
+        title: `Lesson ${i + 1} Video Walkthrough`,
+        type: "video",
+        description: "Watch the guided concept walkthrough.",
+      },
+      {
+        title: `Lesson ${i + 1} Interactive Coding`,
+        type: "interactive",
+        editor_type: "monaco_html",
+        project_mode: "starter",
+        is_assignment: false,
+        instructions: `1. Follow the HTML structure.\n2. Add custom tags and CSS styling.\n3. Test the live preview by clicking Run.`,
+        starter_code: `<!DOCTYPE html>\n<html>\n<head>\n  <title>Lesson ${i + 1}</title>\n  <style>\n    body { font-family: sans-serif; padding: 20px; }\n    h1 { color: #2563eb; }\n  </style>\n</head>\n<body>\n  <h1>Lesson ${i + 1} Web Project</h1>\n  <p>Customize this page and check the preview!</p>\n</body>\n</html>`,
+      },
+      {
+        title: `Lesson ${i + 1} Debug Challenge`,
+        type: "practice",
+        editor_type: "monaco_html",
+        project_mode: "debug",
+        is_assignment: true,
+        instructions: `1. Find and fix the syntax errors in the HTML/CSS below.\n2. Ensure all tags are properly closed.\n3. Click Submit once fixed!`,
+        starter_code: `<!DOCTYPE html>\n<html>\n<head>\n  <!-- BUG: Missing closing title tag and unclosed p tag below -->\n  <title>Debug Challenge ${i + 1}\n</head>\n<body>\n  <h1>Fix the Bugs in Lesson ${i + 1}</h1>\n  <p>Can you find the missing tags?\n</body>\n</html>`,
+      },
     ],
     assignment_required: true,
-    assignment_data: { title: `Lesson ${i + 1} Assignment` },
     quiz_required: true,
-    quiz_data: { title: `Lesson ${i + 1} Quiz` },
+    is_end_of_course: i === 9,
+  }));
+
+  const getPythonLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: ${
+      i === 0 ? "Introduction to Python & Print Statements" :
+      i === 1 ? "Variables, Numbers & Data Types" :
+      i === 2 ? "User Inputs & String Manipulation" :
+      i === 3 ? "Conditionals & If-Else Logic" :
+      i === 4 ? "Loops: While and For Loops" :
+      i === 5 ? "Lists, Arrays & Collections" :
+      i === 6 ? "Functions & Modular Code" :
+      i === 7 ? "Dictionaries & Key-Value Pairs" :
+      i === 8 ? "Error Handling & Debugging" :
+      "Final Project: Python Adventure Game"
+    }`,
+    description: `Learn Python from fundamentals to writing your own programs and games.`,
+    content: `Explore Python concepts with interactive code challenges and exercises.`,
+    duration_minutes: 45,
+    exercises: [
+      {
+        title: `Lesson ${i + 1} Concept Video`,
+        type: "video",
+        description: "Watch the explanation of this lesson's Python concepts.",
+      },
+      {
+        title: `Lesson ${i + 1} Interactive Exercise`,
+        type: "interactive",
+        editor_type: "monaco_python",
+        project_mode: "starter",
+        is_assignment: false,
+        instructions: `Write a Python program implementing the concepts from this lesson. Click Run to verify output.`,
+        starter_code: `# Python Lesson ${i + 1}\nprint("Welcome to Lesson ${i + 1}!")\n`,
+      },
+      {
+        title: `Lesson ${i + 1} Debug & Logic Challenge`,
+        type: "practice",
+        editor_type: "monaco_python",
+        project_mode: "debug",
+        is_assignment: true,
+        instructions: `Find the syntax or logic error in this Python script and fix it!`,
+        starter_code: `# Debug Challenge: Fix the bug below\nscore = 10\nif score = 10:\n    print("Score is perfect")\n`,
+      },
+    ],
+    assignment_required: true,
+    quiz_required: true,
+    is_end_of_course: i === 9,
+  }));
+
+  const getScratchLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: ${
+      i === 0 ? "Introduction to Scratch & Sprite Motion" :
+      i === 1 ? "Costumes, Sounds & Looks" :
+      i === 2 ? "Events, Keypresses & User Control" :
+      i === 3 ? "Loops & Animation Sequences" :
+      i === 4 ? "Variables & Scoring Systems" :
+      i === 5 ? "Sensing & Collision Detection" :
+      i === 6 ? "Broadcasts & Messages Between Sprites" :
+      i === 7 ? "Clones & Particle Effects" :
+      i === 8 ? "Soundtracks & Game Mechanics" :
+      "Final Project: Complete Scratch Arcade Game"
+    }`,
+    description: `Build colorful animations, interactive stories, and arcade games with Scratch.`,
+    content: `Visual drag-and-drop block coding with live testing and sprite manipulation.`,
+    duration_minutes: 45,
+    exercises: [
+      {
+        title: `Lesson ${i + 1} Tutorial Video`,
+        type: "video",
+      },
+      {
+        title: `Lesson ${i + 1} Scratch Creative Activity`,
+        type: "interactive",
+        editor_type: "scratch",
+        is_assignment: false,
+        instructions: `Open the Scratch workspace, create a new sprite, and use motion blocks to animate it.`,
+      },
+      {
+        title: `Lesson ${i + 1} Graded Scratch Project`,
+        type: "practice",
+        editor_type: "scratch",
+        is_assignment: true,
+        instructions: `Build the assigned project in Scratch and click Submit when finished!`,
+      },
+    ],
+    assignment_required: true,
+    quiz_required: true,
+    is_end_of_course: i === 9,
+  }));
+
+  const getRobloxLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: ${
+      i === 0 ? "Introduction to Roblox Studio & Workspace" :
+      i === 1 ? "Parts, Materials & Anchoring" :
+      i === 2 ? "Introduction to Lua Scripting" :
+      i === 3 ? "Part Touched Events & Kill Blocks" :
+      i === 4 ? "Leaderboards & Player Stats" :
+      i === 5 ? "Spawning Items & Power-ups" :
+      i === 6 ? "GUI Design & Screen Displays" :
+      i === 7 ? "Sound Effects & Particle Emitters" :
+      i === 8 ? "Multiplayer Game Testing" :
+      "Final Project: Publish Your Obby Game"
+    }`,
+    description: `Design 3D worlds and script games using Roblox Studio and Lua.`,
+    content: `Step-by-step game design guides with live testing and project submission.`,
+    duration_minutes: 60,
+    exercises: [
+      {
+        title: `Lesson ${i + 1} Roblox Studio Walkthrough`,
+        type: "video",
+      },
+      {
+        title: `Lesson ${i + 1} Lua Scripting Task`,
+        type: "practice",
+        editor_type: "external",
+        external_url: "https://create.roblox.com",
+        is_assignment: true,
+        instructions: `Open Roblox Studio, complete the scripting challenge, and paste your game or model link below.`,
+      },
+    ],
+    assignment_required: true,
+    quiz_required: true,
+    is_end_of_course: i === 9,
+  }));
+
+  const getAppDevLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: ${
+      i === 0 ? "Introduction to Mobile Apps & UI Design" :
+      i === 1 ? "Buttons, Labels & Screen Layouts" :
+      i === 2 ? "User Inputs & Text-to-Speech" :
+      i === 3 ? "Variables & App State" :
+      i === 4 ? "Camera & Media Integration" :
+      i === 5 ? "Sensors: Accelerometer & Location" :
+      i === 6 ? "Local Databases & Storing Data" :
+      i === 7 ? "Web APIs & Online Services" :
+      i === 8 ? "App Testing on Real Devices" :
+      "Final Project: Publish Your Mobile App"
+    }`,
+    description: `Create mobile apps that run on phones and tablets.`,
+    content: `Build real apps with UI elements, sensors, and databases.`,
+    duration_minutes: 50,
+    exercises: [
+      {
+        title: `Lesson ${i + 1} App Architecture Video`,
+        type: "video",
+      },
+      {
+        title: `Lesson ${i + 1} App Builder Project`,
+        type: "practice",
+        editor_type: "external",
+        external_url: "https://appinventor.mit.edu",
+        is_assignment: true,
+        instructions: `Design the app screen and block logic, then submit your app link or export file.`,
+      },
+    ],
+    assignment_required: true,
+    quiz_required: true,
+    is_end_of_course: i === 9,
+  }));
+
+  const getJavaScriptLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: JavaScript Fundamentals ${i + 1}`,
+    description: `Learn modern interactive JavaScript programming.`,
+    content: `Explore JS variables, functions, events, and DOM manipulation.`,
+    duration_minutes: 45,
+    exercises: [
+      { title: `Lesson ${i + 1} Video Guide`, type: "video" },
+      {
+        title: `Lesson ${i + 1} JS Coding Task`,
+        type: "interactive",
+        editor_type: "monaco_js",
+        project_mode: "starter",
+        is_assignment: false,
+        instructions: `Write JavaScript code and check the console output with Run.`,
+        starter_code: `// Lesson ${i + 1} JavaScript\nconsole.log("Running Lesson ${i + 1}");\n`,
+      },
+      {
+        title: `Lesson ${i + 1} Debug Challenge`,
+        type: "practice",
+        editor_type: "monaco_js",
+        project_mode: "debug",
+        is_assignment: true,
+        instructions: `Identify and resolve the JavaScript error.`,
+        starter_code: `function test() {\n  // BUG: missing closing brace\n  console.log("Testing");\n`,
+      },
+    ],
+    assignment_required: true,
+    quiz_required: true,
     is_end_of_course: i === 9,
   }));
 
   const getGraphicsDesignLessons = () => Array.from({ length: 10 }, (_, i) => ({
-    title: `Lesson ${i + 1}: ${i === 0 ? 'Introduction to Graphics Design' : i === 9 ? 'Final Project' : `Design Concepts ${i + 1}`}`,
-    description: `Master visual design principles`,
-    content: `Learn to create stunning graphics.`,
-    duration_minutes: i === 9 ? 90 : 45 + (i * 5),
+    title: `Lesson ${i + 1}: Graphics & Design Concepts ${i + 1}`,
+    description: `Master color theory, typography, layouts, and vector graphics.`,
+    content: `Creative design projects with step-by-step guidance.`,
+    duration_minutes: 45,
     exercises: [
-      { type: "video", title: `Lesson ${i + 1} Useful Video` },
-      { type: "interactive", title: `Lesson ${i + 1} Exercise - Interactive Example` },
-      { type: "practice", title: `Lesson ${i + 1} Exercise - Hands-on Practice` },
+      { title: `Lesson ${i + 1} Design Video`, type: "video" },
+      {
+        title: `Lesson ${i + 1} Creative Design Submission`,
+        type: "practice",
+        editor_type: "external",
+        is_assignment: true,
+        instructions: `Create your graphic design and submit the share link or exported image.`,
+      },
     ],
     assignment_required: true,
-    assignment_data: { title: `Lesson ${i + 1} Assignment` },
     quiz_required: true,
-    quiz_data: { title: `Lesson ${i + 1} Quiz` },
     is_end_of_course: i === 9,
   }));
 
-  const getRoboticsLessons = () => getGenericLessons("Robotics");
-  const getWebDevLessons = () => getGenericLessons("Web Development");
-  const getJavaScriptLessons = () => getGenericLessons("JavaScript");
-
-  const getGenericLessons = (courseName: string) => Array.from({ length: 10 }, (_, i) => ({
-    title: `Lesson ${i + 1}: ${i === 0 ? `Introduction to ${courseName}` : i === 9 ? `Final Project` : `${courseName} Concepts ${i + 1}`}`,
-    description: `Continue learning ${courseName}`,
-    content: `Build your ${courseName} skills.`,
-    duration_minutes: i === 9 ? 90 : 45 + (i * 5),
+  const getRoboticsLessons = () => Array.from({ length: 10 }, (_, i) => ({
+    title: `Lesson ${i + 1}: Robotics & Circuit Engineering ${i + 1}`,
+    description: `Explore sensors, microcontrollers, circuits, and robotics logic.`,
+    content: `Hands-on robotics simulations and coding projects.`,
+    duration_minutes: 50,
     exercises: [
-      { type: "video", title: `Lesson ${i + 1} Useful Video` },
-      { type: "interactive", title: `Lesson ${i + 1} Exercise` },
-      { type: "practice", title: `Lesson ${i + 1} Practice` },
+      { title: `Lesson ${i + 1} Robotics Video`, type: "video" },
+      {
+        title: `Lesson ${i + 1} Circuit Simulator Task`,
+        type: "practice",
+        editor_type: "external",
+        external_url: "https://www.tinkercad.com/circuits",
+        is_assignment: true,
+        instructions: `Assemble the simulated circuit and submit your project link.`,
+      },
     ],
     assignment_required: true,
-    assignment_data: { title: `Lesson ${i + 1} Assignment` },
     quiz_required: true,
-    quiz_data: { title: `Lesson ${i + 1} Quiz` },
     is_end_of_course: i === 9,
   }));
 
@@ -382,13 +579,80 @@ export function LessonManager({ courseId, category }: LessonManagerProps) {
           )}
         </div>
         {canEdit && (
-          <div className="flex gap-2">
-            {lessons.length === 0 && (
-              <Button onClick={generateCourseLessons} variant="outline">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Generate Course Lessons
-              </Button>
-            )}
+          <div className="flex gap-2 items-center flex-wrap">
+            <Button 
+              onClick={() => setGenerateDialogOpen(true)} 
+              variant="outline" 
+              className="gap-1.5 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+            >
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              Generate Lessons
+            </Button>
+
+            {/* Curriculum Generator Selection Modal */}
+            <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-500" />
+                    Generate Course Curriculum
+                  </DialogTitle>
+                  <DialogDescription>
+                    Select a curriculum blueprint. This will generate structured lessons complete with starter projects, debug challenges, and exercise tasks.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Course Blueprint Track</Label>
+                    <Select value={selectedTrack} onValueChange={setSelectedTrack}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select course track..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="web">Web Design &amp; Development (HTML/CSS/JS)</SelectItem>
+                        <SelectItem value="javascript">JavaScript &amp; Interactive Coding</SelectItem>
+                        <SelectItem value="python">Python Programming &amp; Logic</SelectItem>
+                        <SelectItem value="scratch">Scratch Visual Game Creation</SelectItem>
+                        <SelectItem value="roblox">Roblox Studio &amp; Lua Game Dev</SelectItem>
+                        <SelectItem value="app">Mobile App Development (App Inventor)</SelectItem>
+                        <SelectItem value="graphic">Graphic Design &amp; Digital Media</SelectItem>
+                        <SelectItem value="robot">Robotics &amp; STEM Engineering</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {lessons.length > 0 && (
+                    <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border-amber-200">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="replace-toggle" className="text-xs font-semibold cursor-pointer">
+                          Replace existing {lessons.length} lessons
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          If off, new lessons will be added after existing ones.
+                        </p>
+                      </div>
+                      <Switch
+                        id="replace-toggle"
+                        checked={replaceExisting}
+                        onCheckedChange={setReplaceExisting}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setGenerateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleGenerateSubmit} disabled={generating} className="bg-primary gap-1.5">
+                    <Sparkles className="w-4 h-4" />
+                    {generating ? "Generating..." : "Generate Lessons"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => setEditingLesson(null)}>
@@ -1062,27 +1326,41 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Editor Type</Label>
+                    <Label className="text-xs">Editor / IDE</Label>
                     <Select value={ex.editor_type || "none"} onValueChange={v => updateExercise(index, "editor_type", v)}>
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None (text/link only)</SelectItem>
-                        <SelectItem value="monaco_html">HTML Editor</SelectItem>
+                        <SelectItem value="monaco_html">HTML/CSS Editor</SelectItem>
                         <SelectItem value="monaco_js">JavaScript Editor</SelectItem>
                         <SelectItem value="monaco_python">Python Editor</SelectItem>
                         <SelectItem value="monaco_css">CSS Editor</SelectItem>
-                        <SelectItem value="scratch">Scratch</SelectItem>
-                        <SelectItem value="external">External Tool (Roblox, etc.)</SelectItem>
+                        <SelectItem value="scratch">Scratch Embed</SelectItem>
+                        <SelectItem value="external">External Tool (Roblox, App Dev)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs">Type</Label>
+                    <Label className="text-xs">Project Type</Label>
+                    <Select value={ex.project_mode || "standard"} onValueChange={v => updateExercise(index, "project_mode", v)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Blank Project</SelectItem>
+                        <SelectItem value="starter">Base / Starter Template</SelectItem>
+                        <SelectItem value="debug">Debug Project (Fix the Bug)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Submission Rule</Label>
                     <div className="flex items-center gap-2 h-8">
                       <Switch
                         id={`is-assignment-${index}`}
@@ -1090,7 +1368,7 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
                         onCheckedChange={v => updateExercise(index, "is_assignment", v)}
                       />
                       <Label htmlFor={`is-assignment-${index}`} className="text-xs cursor-pointer">
-                        {ex.is_assignment ? "Assignment (Save + Submit)" : "Exercise (Save only)"}
+                        {ex.is_assignment ? "Assignment (Submit to Tutor)" : "Exercise (Save only)"}
                       </Label>
                     </div>
                   </div>
@@ -1102,14 +1380,14 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
                     <Input
                       value={ex.external_url || ""}
                       onChange={e => updateExercise(index, "external_url", e.target.value)}
-                      placeholder="https://roblox.com/... or https://thonny.org/..."
+                      placeholder="https://create.roblox.com/... or https://appinventor.mit.edu/..."
                       className="h-8 text-xs"
                     />
                   </div>
                 )}
 
                 <div className="space-y-1">
-                  <Label className="text-xs">Instructions (shown in editor panel)</Label>
+                  <Label className="text-xs">Instructions (shown in editor side panel)</Label>
                   <Textarea
                     value={ex.instructions || ""}
                     onChange={e => updateExercise(index, "instructions", e.target.value)}
@@ -1121,12 +1399,21 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
 
                 {(ex.editor_type?.startsWith("monaco_")) && (
                   <div className="space-y-1">
-                    <Label className="text-xs">Starter Code (optional)</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      {ex.project_mode === "debug" ? (
+                        <>
+                          <Bug className="w-3 h-3 text-red-500" />
+                          <span className="text-red-600 font-semibold">Buggy Code to Debug (starter code with errors to fix)</span>
+                        </>
+                      ) : (
+                        <span>Base Project / Starter Code (pre-filled template for students)</span>
+                      )}
+                    </Label>
                     <Textarea
                       value={ex.starter_code || ""}
                       onChange={e => updateExercise(index, "starter_code", e.target.value)}
-                      placeholder="Pre-filled code students start with..."
-                      rows={2}
+                      placeholder={ex.project_mode === "debug" ? "Write code with intentional bugs for the student to solve..." : "Pre-filled starter template code..."}
+                      rows={3}
                       className="text-xs font-mono"
                     />
                   </div>

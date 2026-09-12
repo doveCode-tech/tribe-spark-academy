@@ -11,6 +11,7 @@ import { BookOpen, Users2, UserCheck, FileText, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { createNotification } from "@/utils/notifications";
 
 interface Course {
   id: string;
@@ -58,6 +59,15 @@ export function EnrollmentDialog({ courses, users, onEnrollmentComplete }: Enrol
 
       const student = users.find(u => (u as any).auth_user_id === selectedStudent);
       const course = courses.find(c => c.id === selectedCourse);
+
+      // Notify the student
+      createNotification({
+        recipientUserId: selectedStudent,
+        type: 'course_enrollment',
+        title: `Enrolled in ${course?.title || 'New Course'}`,
+        message: `You have been enrolled in "${course?.title}". Check your dashboard and start learning!`,
+        data: { course_id: selectedCourse },
+      });
 
       toast({
         title: "Student Enrolled",

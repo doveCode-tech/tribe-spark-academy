@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Send, MessageCircle, Shield, Paperclip, X, Pencil, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { soundEffects } from "@/utils/audio";
+import { createNotification } from "@/utils/notifications";
 
 interface ChatMessage {
   id: string;
@@ -165,10 +167,13 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
         const newMsg = payload.new as ChatMessage;
         const current = selectedContactRef.current;
 
+        const isFromOther = newMsg.sender_id !== user.id;
+
         if (isStudent) {
           // Student: show any message involving them
           if (newMsg.sender_id === user.id || newMsg.recipient_id === user.id) {
             setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
+            if (isFromOther) soundEffects.playChime();
           }
           return;
         }
@@ -180,6 +185,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
             newMsg.recipient_id === current.auth_user_id;
           if (involvesSelected) {
             setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
+            if (isFromOther) soundEffects.playChime();
             return;
           }
         }
@@ -267,6 +273,25 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
       if (error) throw error;
       if (data?.length) {
         setMessages(prev => prev.some(m => m.id === data[0].id) ? prev : [...prev, data[0]]);
+        
+        // Notify recipient(s)
+        if (isStudent) {
+          createNotification({
+            recipientRole: "tutor",
+            type: "chat_message",
+            title: `New student message from ${userProfile?.name || "Student"}`,
+            message: messageText || (attachment ? `Sent attachment: ${attachment.name}` : "New message"),
+            data: { sender_id: user.id },
+          });
+        } else if (selectedContact) {
+          createNotification({
+            recipientUserId: selectedContact.auth_user_id,
+            type: "chat_message",
+            title: "New message from Tutor Support",
+            message: messageText || (attachment ? `Sent attachment: ${attachment.name}` : "New message"),
+            data: { sender_id: user.id },
+          });
+        }
       }
     } catch (err: any) {
       console.error("Send failed:", err);
