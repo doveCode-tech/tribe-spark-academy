@@ -30,6 +30,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { LessonActivityDialog, LessonData } from "@/components/LessonActivityDialog";
 
 interface Lesson {
   id: string;
@@ -39,6 +40,7 @@ interface Lesson {
   duration_minutes: number;
   order_index: number;
   video_urls: string[] | null;
+  youtube_urls: string[] | null;
   exercises: any;
   content_type: string;
   assignment_required: boolean;
@@ -199,12 +201,27 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
     }));
   };
 
-  const saveLesson = async (lessonData: Partial<Lesson>) => {
+  const saveLesson = async (lessonData: Partial<LessonData>) => {
     try {
       if (editingLesson) {
+        const updatePayload: Record<string, any> = {
+          title: lessonData.title,
+          description: lessonData.description,
+          content: lessonData.content,
+          duration_minutes: lessonData.duration_minutes,
+          video_urls: lessonData.video_urls ?? [],
+          youtube_urls: lessonData.youtube_urls ?? [],
+          exercises: lessonData.exercises ?? [],
+          assignment_required: lessonData.assignment_required ?? false,
+          quiz_required: lessonData.quiz_required ?? false,
+          is_end_of_course: lessonData.is_end_of_course ?? false,
+        };
+        // Remove undefined keys
+        Object.keys(updatePayload).forEach(k => updatePayload[k] === undefined && delete updatePayload[k]);
+
         const { error } = await supabase
           .from('lessons')
-          .update(lessonData)
+          .update(updatePayload)
           .eq('id', editingLesson.id);
 
         if (error) throw error;
@@ -217,8 +234,12 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
           duration_minutes: lessonData.duration_minutes || 30,
           course_id: courseId,
           order_index: lessons.length + 1,
-          video_urls: lessonData.video_urls || [],
-          exercises: lessonData.exercises || [],
+          video_urls: lessonData.video_urls ?? [],
+          youtube_urls: lessonData.youtube_urls ?? [],
+          exercises: lessonData.exercises ?? [],
+          assignment_required: lessonData.assignment_required ?? false,
+          quiz_required: lessonData.quiz_required ?? false,
+          is_end_of_course: lessonData.is_end_of_course ?? false,
           content_type: 'lesson'
         };
         
@@ -323,8 +344,9 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
                       Add Lesson
                     </Button>
                   </DialogTrigger>
-                  <LessonEditDialog 
+                  <LessonActivityDialog 
                     lesson={editingLesson}
+                    courseId={courseId}
                     onSave={saveLesson}
                     onCancel={() => {
                       setDialogOpen(false);
