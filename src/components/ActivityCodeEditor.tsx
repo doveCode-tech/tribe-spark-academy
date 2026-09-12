@@ -2,16 +2,16 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Save, 
-  Send, 
-  Play, 
-  ExternalLink, 
-  ChevronLeft, 
-  ChevronRight, 
-  Maximize2, 
-  Minimize2, 
-  Code2, 
+import {
+  Save,
+  Send,
+  Play,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
+  Code2,
   AlertTriangle,
   Copy,
   Check,
@@ -20,7 +20,9 @@ import {
   Sparkles,
   RefreshCw,
   Bug,
-  Layout
+  Layout,
+  Plus,
+  X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,7 +30,14 @@ import { useToast } from "@/hooks/use-toast";
 import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
 
-export type EditorType = "monaco_html" | "monaco_js" | "monaco_python" | "monaco_css" | "scratch" | "external" | "none";
+export type EditorType =
+  | "monaco_html"
+  | "monaco_js"
+  | "monaco_python"
+  | "monaco_css"
+  | "scratch"
+  | "external"
+  | "none";
 export type ProjectMode = "standard" | "starter" | "debug";
 
 export interface Exercise {
@@ -51,12 +60,12 @@ interface ActivityCodeEditorProps {
   isAssignment?: boolean;
 }
 
-const LANGUAGE_MAP: Record<string, string> = {
-  monaco_html: "html",
-  monaco_js: "javascript",
-  monaco_python: "python",
-  monaco_css: "css",
-};
+// ── File tab types ───────────────────────────────────────────────────────────
+interface FileTab {
+  name: string;
+  language: string;
+  content: string;
+}
 
 const DEFAULT_FILENAMES: Record<string, string> = {
   monaco_html: "index.html",
@@ -65,7 +74,30 @@ const DEFAULT_FILENAMES: Record<string, string> = {
   monaco_css: "styles.css",
 };
 
-// High quality default blueprints/templates when an activity has no code yet
+const LANGUAGE_MAP: Record<string, string> = {
+  monaco_html: "html",
+  monaco_js: "javascript",
+  monaco_python: "python",
+  monaco_css: "css",
+};
+
+const EXTRA_FILE_TEMPLATES: Record<string, { name: string; language: string; content: string }[]> = {
+  monaco_html: [
+    { name: "style.css", language: "css", content: "/* Add your CSS styles here */\nbody {\n  font-family: sans-serif;\n  margin: 20px;\n}\n" },
+    { name: "script.js", language: "javascript", content: "// Add your JavaScript here\nconsole.log('Hello from script.js!');\n" },
+  ],
+  monaco_js: [
+    { name: "helpers.js", language: "javascript", content: "// Helper functions\nfunction add(a, b) { return a + b; }\n" },
+  ],
+  monaco_css: [
+    { name: "theme.css", language: "css", content: "/* Theme overrides */\n" },
+  ],
+  monaco_python: [
+    { name: "utils.py", language: "python", content: "# Utility functions\ndef greet(name):\n    return f'Hello, {name}!'\n" },
+  ],
+};
+
+// ── Default blueprint templates ──────────────────────────────────────────────
 const BLUEPRINT_TEMPLATES: Record<string, { starter: string; debug: string; instructions: string }> = {
   monaco_html: {
     starter: `<!DOCTYPE html>
@@ -102,102 +134,97 @@ const BLUEPRINT_TEMPLATES: Record<string, { starter: string; debug: string; inst
 </head>
 <body>
   <div class="card">
-    <h1>Welcome to My Project!</h1>
-    <p>Follow the instructions on the left to customize this page.</p>
-    <button onclick="alert('Hello from STEMTribe!')">Click Me</button>
+    <h1>🌐 My Web Project</h1>
+    <p>Welcome! Edit this page and click <strong>Run</strong> to see the live preview.</p>
+    <button onclick="alert('Hello World!')">Click Me!</button>
   </div>
 </body>
 </html>`,
     debug: `<!DOCTYPE html>
 <html>
-  <head>
-    <title>Web Design Debug Challenge</title>
-  <!-- BUG: Missing closing head tag and broken paragraph tags below -->
-  <body>
-    <h1>Fix the Bugs in this Page!</h1>
-    <p>This paragraph is not closed properly
-    <div>
-      <a href="#" target="_blank">View Website in New Tab</a>
-    </div>
-  </body>
+<head>
+  <!-- BUG: Missing closing title tag and unclosed p tag below -->
+  <title>Debug Challenge
+</head>
+<body>
+  <h1>Fix the Bugs Below</h1>
+  <p>Can you find the missing closing tags?
+  <img src=profile.jpg>
+  <a href="#">Click here<a>
+</body>
 </html>`,
-    instructions: `### Activity Instructions:
-1. Review the starter HTML structure.
-2. Add your own heading (\`<h1>\`) and a description (\`<p>\`).
-3. Add a styled button and test it in the **Preview** panel using the green **Run** button.
-4. Click **Save** to keep your progress, or **Submit** when you are finished!`,
-  },
-  monaco_python: {
-    starter: `# Python Interactive Activity
-# Goal: Build a program that interacts with the user
-
-def calculate_sum(numbers):
-    total = 0
-    for n in numbers:
-        total += n
-    return total
-
-print("--- STEMTribe Python Explorer ---")
-user_name = input("Enter your name: ") if False else "Student"
-print(f"Hello, {user_name}! Welcome to Python.")
-
-sample_numbers = [5, 4, 3, 2, 1]
-result = calculate_sum(sample_numbers)
-print(f"Sum of {sample_numbers} = {result}")
-`,
-    debug: `# Debug Challenge: Break out of a loop iteration
-# BUG: The loop below never terminates or has a logic error. Fix it!
-
-numbers = [5, 4, 3, 2, 1]
-total = 0
-
-for num in numbers:
-    # TODO: Add condition to break or skip negative numbers
-    total += num
-
-print("Total =", total)
-`,
-    instructions: `### Python Activity Instructions:
-1. Read the code carefully and understand the function.
-2. Test the output using the **Run** button.
-3. Modify the code to solve the challenge.
-4. Save or Submit your solution to your tutor!`,
+    instructions: `### HTML Project Instructions:
+1. Read through the starter HTML and CSS.
+2. Add your own content inside the <body>.
+3. Customize colours and fonts in the <style> block.
+4. Press Run to see the live result in the preview panel.`,
   },
   monaco_js: {
-    starter: `// JavaScript Interactive Coding
-console.log("STEMTribe JavaScript Console Initialized");
+    starter: `// JavaScript Interactive Activity
+// Click Run to see console output in the right panel
 
-function greet(studentName) {
-  return \`Welcome to STEMTribe, \${studentName}! Let's build something awesome.\`;
+const name = "STEMTribe Coder";
+console.log("Welcome, " + name + "!");
+
+// Try a simple function
+function add(a, b) {
+  return a + b;
 }
 
-console.log(greet("Creative Coder"));
+console.log("5 + 3 =", add(5, 3));
 `,
-    debug: `// Debug Challenge: Fix the function syntax error
-function calculateScore(points, multiplier) {
-  // BUG: Missing return statement and undeclared variable
-  totalScore = points * multiplier
+    debug: `// Fix the syntax / logic errors below!
+function greet(name) {
+  console.log("Hello " + name   // BUG: missing closing parenthesis
 }
 
-console.log("Score:", calculateScore(10, 5));
+let scores = [10, 20, 30;]      // BUG: stray semicolon inside array
+console.log(scores[0])
+greet("World")
 `,
-    instructions: `### JavaScript Challenge Instructions:
-1. Examine the JavaScript code in the editor.
-2. Fix any syntax errors or write the required logic.
-3. Click **Run** to check console output.`,
+    instructions: `### JavaScript Instructions:
+1. Write or fix the JavaScript code.
+2. Use console.log() to print output.
+3. Click Run to see results in the terminal panel on the right.`,
+  },
+  monaco_python: {
+    starter: `# Python Activity — click Run to execute
+name = "STEMTribe Coder"
+print(f"Welcome, {name}!")
+
+# Simple calculation
+def add(a, b):
+    return a + b
+
+result = add(5, 3)
+print(f"5 + 3 = {result}")
+`,
+    debug: `# Debug Challenge: Fix the bugs below!
+score = 10
+if score = 10:          # BUG: should be == not =
+    print("Score is perfect")
+
+my_list = [1, 2, 3
+print(my_list)          # BUG: missing closing bracket above
+`,
+    instructions: `### Python Instructions:
+1. Read the code carefully.
+2. Fix any syntax or logic errors.
+3. Click Run to check your output.`,
   },
   monaco_css: {
-    starter: `/* CSS Styling Blueprint */
+    starter: `/* CSS Styling Activity */
 body {
+  font-family: 'Segoe UI', sans-serif;
   margin: 0;
   padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  min-height: 100vh;
   color: white;
-  font-family: 'Poppins', sans-serif;
 }
 
-.box {
-  background: rgba(255, 255, 255, 0.2);
+.container {
+  background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   padding: 30px;
   border-radius: 16px;
@@ -214,173 +241,51 @@ body {
     instructions: `### CSS Styling Instructions:
 1. Customize the background, font, and layout properties.
 2. Test responsive alignment in the live preview.`,
-  }
+  },
 };
 
-export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment }: ActivityCodeEditorProps) {
-  const { user, userProfile } = useAuth();
-  const { toast } = useToast();
-  
-  const editorType = exercise.editor_type || "monaco_html";
-  const projectMode: ProjectMode = exercise.project_mode || "standard";
-  const isAssignmentActivity = isAssignment ?? exercise.is_assignment ?? false;
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function buildHtmlOutput(files: FileTab[]): string {
+  const htmlFile = files.find((f) => f.name === "index.html" || f.language === "html");
+  const cssFiles = files.filter((f) => f.language === "css");
+  const jsFiles = files.filter((f) => f.language === "javascript");
 
-  // Local storage persistence
-  const storageKey = `code_${courseId}_${lessonId}_${exercise.title?.slice(0, 20).replace(/\s/g, "_")}`;
-  
-  // Choose default template code based on editorType and projectMode
-  const blueprint = BLUEPRINT_TEMPLATES[editorType] || BLUEPRINT_TEMPLATES.monaco_html;
-  const initialDefaultCode = 
-    projectMode === "debug" ? blueprint.debug : 
-    (exercise.starter_code || blueprint.starter);
+  if (!htmlFile) return "<p>No HTML file found.</p>";
 
-  const [code, setCode] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) return saved;
-    }
-    return initialDefaultCode;
-  });
+  let html = htmlFile.content;
 
-  const [instructionsOpen, setInstructionsOpen] = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [output, setOutput] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState(DEFAULT_FILENAMES[editorType] || "code");
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const editorRef = useRef<any>(null);
+  // Inject CSS files before </head>
+  if (cssFiles.length > 0) {
+    const cssTag = cssFiles
+      .map((f) => `<style>/* ${f.name} */\n${f.content}\n</style>`)
+      .join("\n");
+    html = html.replace("</head>", `${cssTag}\n</head>`);
+  }
 
-  const language = LANGUAGE_MAP[editorType] || "html";
-  const isDebugMode = projectMode === "debug";
+  // Inject JS files before </body>
+  if (jsFiles.length > 0) {
+    const jsTag = jsFiles
+      .map((f) => `<script>/* ${f.name} */\n${f.content}\n</script>`)
+      .join("\n");
+    html = html.replace("</body>", `${jsTag}\n</body>`);
+  }
 
-  // When exercise prop changes, refresh default if needed
-  useEffect(() => {
-    const saved = localStorage.getItem(storageKey);
-    if (!saved) {
-      const bp = BLUEPRINT_TEMPLATES[editorType] || BLUEPRINT_TEMPLATES.monaco_html;
-      setCode(projectMode === "debug" ? bp.debug : (exercise.starter_code || bp.starter));
-    }
-  }, [exercise.title, editorType, projectMode, storageKey]);
+  return html;
+}
 
-  // ── Monaco Editor onMount: Configure rich IntelliSense & formatting ──────────
-  const handleEditorDidMount: OnMount = (editor, monaco) => {
-    editorRef.current = editor;
-
-    // Enable HTML & JS extra auto-completion and diagnostics
-    monaco.languages.typescript?.javascriptDefaults?.setDiagnosticsOptions({
-      noSemanticValidation: false,
-      noSyntaxValidation: false,
-    });
-
-    monaco.languages.typescript?.javascriptDefaults?.setCompilerOptions({
-      target: monaco.languages.typescript.ScriptTarget.ES2020,
-      allowNonTextFiles: false,
-    });
-  };
-
-  // ── Save locally ─────────────────────────────────────────────────────────────
-  const handleSave = useCallback(() => {
-    localStorage.setItem(storageKey, code);
-    setSaving(true);
-    soundEffects.playChime();
-    setTimeout(() => setSaving(false), 800);
-    toast({ title: "Saved!", description: "Your code has been saved locally." });
-  }, [code, storageKey, toast]);
-
-  // ── Reset to Starter/Blueprint ───────────────────────────────────────────────
-  const handleReset = () => {
-    if (confirm("Reset code back to the initial template? Any unsaved edits will be cleared.")) {
-      const resetCode = projectMode === "debug" ? blueprint.debug : (exercise.starter_code || blueprint.starter);
-      setCode(resetCode);
-      localStorage.removeItem(storageKey);
-      toast({ title: "Reset Complete", description: "Code has been reset to the template." });
-    }
-  };
-
-  // ── Copy Shareable Project Link ──────────────────────────────────────────────
-  const handleCopyLink = () => {
-    const shareUrl = `${window.location.origin}/courses/${courseId}?lesson=${lessonId}&activity=${encodeURIComponent(exercise.title || "activity")}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setCopiedLink(true);
-      soundEffects.playChime();
-      toast({ 
-        title: "Link Copied! 📋", 
-        description: "Direct activity link copied to clipboard. Share with tutor or teammates!" 
-      });
-      setTimeout(() => setCopiedLink(false), 2500);
-    });
-  };
-
-  // ── Submit Code to Tutor ─────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!user) {
-      toast({ title: "Login required", description: "Please log in to submit your work.", variant: "destructive" });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const { error } = await supabase.from("projects").upsert({
-        course_id: courseId,
-        lesson_id: lessonId,
-        student_id: userProfile?.auth_user_id || user.id,
-        title: exercise.title || "Activity Submission",
-        description: exercise.description || (isDebugMode ? "Debug challenge completed" : "Code activity completed"),
-        code_content: code,
-        editor_type: editorType,
-        review_status: "submitted",
-        submitted_at: new Date().toISOString(),
-      }, { onConflict: "course_id,lesson_id,student_id" });
-
-      if (error) throw error;
-
-      soundEffects.playSuccess();
-
-      // Notify tutors and admins
-      createNotification({
-        recipientRole: "tutor",
-        type: "activity_submitted",
-        title: `Project Submitted: ${exercise.title || "Activity"}`,
-        message: `${userProfile?.name || "A student"} submitted their code for "${exercise.title}". Ready for review and grading!`,
-        data: { course_id: courseId, lesson_id: lessonId },
-      });
-
-      toast({ 
-        title: "🚀 Submitted to Tutor!", 
-        description: "Your work has been submitted for review. Your tutor can see your code in the Submissions tab!" 
-      });
-    } catch (err: any) {
-      toast({ title: "Submission failed", description: err.message, variant: "destructive" });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ── Live Run Execution ───────────────────────────────────────────────────────
-  const handleRun = () => {
-    setOutput("running");
-    setTimeout(() => {
-      if (!iframeRef.current) return;
-      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
-      if (!doc) return;
-
-      if (editorType === "monaco_html" || editorType === "monaco_css") {
-        doc.open();
-        doc.write(code);
-        doc.close();
-      } else if (editorType === "monaco_js") {
-        doc.open();
-        doc.write(`<!DOCTYPE html>
+function buildJsOutput(code: string): string {
+  return `<!DOCTYPE html>
 <html>
 <head>
   <style>
     body { font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; background: #0f172a; color: #38bdf8; padding: 16px; margin: 0; }
-    .log-item { padding: 4px 0; border-bottom: 1px solid #1e293b; }
+    .log-item { padding: 4px 0; border-bottom: 1px solid #1e293b; white-space: pre-wrap; }
     .err-item { color: #f87171; font-weight: bold; }
+    .header { color: #94a3b8; font-size: 11px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
+  <div class="header">▶ JavaScript Console Output</div>
   <div id="logs"></div>
   <script>
     const logBox = document.getElementById('logs');
@@ -390,42 +295,300 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
       d.textContent = '> ' + text;
       logBox.appendChild(d);
     };
-    console.log = (...args) => append(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), false);
+    const _orig = { log: console.log, error: console.error, warn: console.warn };
+    console.log = (...args) => append(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '), false);
     console.error = (...args) => append(args.join(' '), true);
-    window.onerror = (msg, url, line) => append('Error at line ' + line + ': ' + msg, true);
+    console.warn = (...args) => append('[WARN] ' + args.join(' '), false);
+    window.onerror = (msg, url, line) => append('❌ Error at line ' + line + ': ' + msg, true);
     try {
       ${code}
     } catch(e) {
-      append('Runtime Error: ' + e.message, true);
+      append('❌ Runtime Error: ' + e.message, true);
     }
-  <\/script>
+  </script>
 </body>
-</html>`);
-        doc.close();
-      } else if (editorType === "monaco_python") {
-        // Python simulated interpreter output
-        doc.open();
-        doc.write(`<!DOCTYPE html>
-<html>
-<head>
-  <style>
+</html>`;
+}
+
+function buildPythonOutput(code: string): string {
+  // Simple simulation — real Python requires a WASM interpreter (Pyodide)
+  // We'll do a best-effort parse of print() calls
+  const lines = code.split("\n");
+  const outputs: string[] = [];
+  let hasError = false;
+  let errorMsg = "";
+
+  // Detect common syntax errors
+  const syntaxChecks = [
+    { re: /if\s+\w+\s*=[^=]/, msg: "SyntaxError: invalid syntax (did you mean == instead of =?)" },
+    { re: /^\s*def\s+\w+[^(]/, msg: "SyntaxError: missing parentheses in function definition" },
+  ];
+  for (const chk of syntaxChecks) {
+    if (chk.re.test(code)) {
+      hasError = true;
+      errorMsg = chk.msg;
+      break;
+    }
+  }
+
+  if (!hasError) {
+    for (const line of lines) {
+      const m = line.match(/^\s*print\s*\((.+)\)\s*$/);
+      if (m) {
+        const inner = m[1].trim().replace(/^['"`]|['"`]$/g, "").replace(/f['"](.+)['"]/, "$1");
+        outputs.push(inner);
+      }
+    }
+    if (outputs.length === 0) outputs.push("Program executed with 0 errors.");
+  }
+
+  const display = hasError
+    ? `<span style="color:#f87171">❌ ${errorMsg}</span>`
+    : outputs.map((o) => `<div>&gt; ${o}</div>`).join("");
+
+  return `<!DOCTYPE html><html><head><style>
     body { font-family: 'Consolas', monospace; font-size: 13px; background: #0f172a; color: #4ade80; padding: 16px; margin: 0; }
     .header { color: #94a3b8; margin-bottom: 12px; font-size: 11px; }
-  </style>
-</head>
-<body>
-  <div class="header">Python 3.10 Interactive Environment (STEMTribe)</div>
-  <pre>${code.includes("print") ? "Program output generated successfully:\\n" + code.split("print(").slice(1).map(p => p.split(")")[0].replace(/['"]/g, "")).join("\\n") : "Program executed with 0 errors."}</pre>
-</body>
-</html>`);
-        doc.close();
-      }
-    }, 50);
+  </style></head><body>
+  <div class="header">▶ Python 3.x Interactive Environment (STEMTribe)</div>
+  <div>${display}</div>
+</body></html>`;
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+export function ActivityCodeEditor({
+  exercise,
+  lessonId,
+  courseId,
+  isAssignment,
+}: ActivityCodeEditorProps) {
+  const { user, userProfile } = useAuth();
+  const { toast } = useToast();
+
+  const editorType = (exercise.editor_type || "monaco_html") as EditorType;
+  const projectMode: ProjectMode = exercise.project_mode || "standard";
+  const isAssignmentActivity = isAssignment ?? exercise.is_assignment ?? false;
+
+  const blueprint = BLUEPRINT_TEMPLATES[editorType] || BLUEPRINT_TEMPLATES.monaco_html;
+  const defaultMainCode =
+    projectMode === "debug" ? blueprint.debug : exercise.starter_code || blueprint.starter;
+
+  const mainFileName = DEFAULT_FILENAMES[editorType] || "index.html";
+  const mainLanguage = LANGUAGE_MAP[editorType] || "html";
+
+  // ── Storage key: unique per student + course + activity ──────────────────
+  const studentId = user?.id || "anon";
+  const activityId = exercise.id || exercise.title?.slice(0, 20).replace(/\s/g, "_") || "act";
+  const storageKey = `ace_${studentId}_${courseId}_${lessonId}_${activityId}`;
+
+  // ── File tabs state ────────────────────────────────────────────────────────
+  const [files, setFiles] = useState<FileTab[]>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) return JSON.parse(saved) as FileTab[];
+    } catch {}
+    return [{ name: mainFileName, language: mainLanguage, content: defaultMainCode }];
+  });
+  const [activeFile, setActiveFile] = useState(mainFileName);
+
+  const [instructionsOpen, setInstructionsOpen] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null); // null = no run yet
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const editorRef = useRef<any>(null);
+
+  const isDebugMode = projectMode === "debug";
+  const currentFile = files.find((f) => f.name === activeFile) || files[0];
+
+  // Sync storage when files change
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(files));
+  }, [files, storageKey]);
+
+  // When exercise changes, reset if no save exists
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey);
+    if (!saved) {
+      const bp = BLUEPRINT_TEMPLATES[editorType] || BLUEPRINT_TEMPLATES.monaco_html;
+      const code = projectMode === "debug" ? bp.debug : exercise.starter_code || bp.starter;
+      setFiles([{ name: mainFileName, language: mainLanguage, content: code }]);
+      setActiveFile(mainFileName);
+    }
+  }, [exercise.title, editorType, projectMode]);
+
+  // ── Monaco onMount ─────────────────────────────────────────────────────────
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monaco.languages.typescript?.javascriptDefaults?.setDiagnosticsOptions({
+      noSemanticValidation: false,
+      noSyntaxValidation: false,
+    });
+    monaco.languages.typescript?.javascriptDefaults?.setCompilerOptions({
+      target: monaco.languages.typescript.ScriptTarget.ES2020,
+    });
   };
 
-  const canRun = true;
+  // ── Update current file content ─────────────────────────────────────────────
+  const updateCurrentFile = (content: string) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.name === activeFile ? { ...f, content } : f))
+    );
+  };
 
-  // ── Scratch Embedded Editor ──────────────────────────────────────────────────
+  // ── Add new file ────────────────────────────────────────────────────────────
+  const addFile = () => {
+    const extras = EXTRA_FILE_TEMPLATES[editorType] || [];
+    const existingNames = files.map((f) => f.name);
+    const newFile = extras.find((e) => !existingNames.includes(e.name));
+    if (newFile) {
+      const tab: FileTab = { ...newFile };
+      setFiles((prev) => [...prev, tab]);
+      setActiveFile(tab.name);
+    } else {
+      // Generic new file
+      let idx = files.length;
+      let name = `file${idx}.${mainLanguage === "html" ? "html" : mainLanguage === "javascript" ? "js" : mainLanguage === "css" ? "css" : "py"}`;
+      while (existingNames.includes(name)) { idx++; name = `file${idx}.${name.split(".").pop()}`; }
+      const tab: FileTab = { name, language: mainLanguage, content: "" };
+      setFiles((prev) => [...prev, tab]);
+      setActiveFile(tab.name);
+    }
+  };
+
+  // ── Close file tab ──────────────────────────────────────────────────────────
+  const closeFile = (name: string) => {
+    if (files.length <= 1) return; // keep at least one
+    const idx = files.findIndex((f) => f.name === name);
+    const newFiles = files.filter((f) => f.name !== name);
+    setFiles(newFiles);
+    if (activeFile === name) {
+      setActiveFile(newFiles[Math.max(0, idx - 1)].name);
+    }
+  };
+
+  // ── Save locally ─────────────────────────────────────────────────────────────
+  const handleSave = useCallback(() => {
+    setSaving(true);
+    soundEffects.playChime();
+    setTimeout(() => setSaving(false), 800);
+    toast({ title: "Saved!", description: "Your code has been saved locally." });
+  }, [toast]);
+
+  // ── Reset ─────────────────────────────────────────────────────────────────────
+  const handleReset = () => {
+    if (confirm("Reset all files back to the initial template? Any unsaved edits will be cleared.")) {
+      const code = projectMode === "debug" ? blueprint.debug : exercise.starter_code || blueprint.starter;
+      setFiles([{ name: mainFileName, language: mainLanguage, content: code }]);
+      setActiveFile(mainFileName);
+      localStorage.removeItem(storageKey);
+      setPreviewSrc(null);
+      setPreviewOpen(false);
+      toast({ title: "Reset Complete", description: "Code has been reset to the template." });
+    }
+  };
+
+  // ── Copy unique project link ──────────────────────────────────────────────────
+  const handleCopyLink = () => {
+    const projectUrl = `${window.location.origin}/project/${studentId}/${courseId}/${encodeURIComponent(activityId)}`;
+    navigator.clipboard.writeText(projectUrl).then(() => {
+      setCopiedLink(true);
+      soundEffects.playChime();
+      toast({
+        title: "Link Copied! 📋",
+        description: "Unique project link copied. Share with your tutor or classmates!",
+      });
+      setTimeout(() => setCopiedLink(false), 2500);
+    });
+  };
+
+  // ── Run Code ──────────────────────────────────────────────────────────────────
+  const handleRun = () => {
+    let src = "";
+    if (editorType === "monaco_html" || editorType === "monaco_css") {
+      src = buildHtmlOutput(files);
+    } else if (editorType === "monaco_js") {
+      src = buildJsOutput(currentFile.content);
+    } else if (editorType === "monaco_python") {
+      src = buildPythonOutput(currentFile.content);
+    }
+    setPreviewSrc(src);
+    setPreviewOpen(true);
+
+    // Give iframe a tick to mount then write
+    setTimeout(() => {
+      if (!iframeRef.current) return;
+      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(src);
+      doc.close();
+    }, 60);
+  };
+
+  // ── Rerun (refresh iframe) ────────────────────────────────────────────────────
+  const handleRerun = () => {
+    if (!previewSrc) return handleRun();
+    setTimeout(() => {
+      if (!iframeRef.current) return;
+      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+      if (!doc) return;
+      doc.open();
+      doc.write(previewSrc);
+      doc.close();
+    }, 60);
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!user) {
+      toast({ title: "Login required", description: "Please log in to submit.", variant: "destructive" });
+      return;
+    }
+    const sid = user.id; // Use the auth UID directly — matches projects_student_id_fkey → auth.users(id)
+    setSubmitting(true);
+    try {
+      const allCode = files.map((f) => `/* ===== ${f.name} ===== */\n${f.content}`).join("\n\n");
+      const { error } = await supabase.from("projects").upsert(
+        {
+          course_id: courseId,
+          lesson_id: lessonId,
+          student_id: sid,
+          title: exercise.title || "Activity Submission",
+          description: exercise.description || (isDebugMode ? "Debug challenge completed" : "Code activity completed"),
+          code_content: allCode,
+          editor_type: editorType,
+          review_status: "submitted",
+          submitted_at: new Date().toISOString(),
+        },
+        { onConflict: "course_id,lesson_id,student_id" }
+      );
+
+      if (error) throw error;
+
+      soundEffects.playSuccess();
+      createNotification({
+        recipientRole: "tutor",
+        type: "activity_submitted",
+        title: `Project Submitted: ${exercise.title || "Activity"}`,
+        message: `${userProfile?.name || "A student"} submitted their code for "${exercise.title}". Ready for review!`,
+        data: { course_id: courseId, lesson_id: lessonId },
+      });
+      toast({
+        title: "🚀 Submitted to Tutor!",
+        description: "Your work has been submitted for review. Your tutor can see your code in the Submissions tab!",
+      });
+    } catch (err: any) {
+      toast({ title: "Submission failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Scratch editor ────────────────────────────────────────────────────────────
   if (editorType === "scratch") {
     return (
       <div className="space-y-3">
@@ -439,28 +602,18 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
             {copiedLink ? "Link Copied!" : "Copy Project Link"}
           </Button>
         </div>
-
         {exercise.instructions && (
           <div className="rounded-lg border p-4 bg-card shadow-sm text-sm space-y-1.5">
             <h4 className="font-semibold text-foreground flex items-center gap-1.5">
               <Layout className="w-4 h-4 text-primary" />
               Activity Instructions
             </h4>
-            <div className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
-              {exercise.instructions}
-            </div>
+            <div className="text-muted-foreground whitespace-pre-wrap leading-relaxed">{exercise.instructions}</div>
           </div>
         )}
-
         <div className="rounded-xl overflow-hidden border shadow-inner bg-black" style={{ height: 580 }}>
-          <iframe
-            src="https://scratch.mit.edu/projects/editor/"
-            title="Scratch Project Editor"
-            className="w-full h-full border-0"
-            allow="microphone; camera"
-          />
+          <iframe src="https://scratch.mit.edu/projects/editor/" title="Scratch Project Editor" className="w-full h-full border-0" allow="microphone; camera" />
         </div>
-
         <div className="flex gap-2 justify-end pt-2">
           <Button onClick={handleSave} variant="outline" disabled={saving}>
             <Save className="w-4 h-4 mr-1.5" />
@@ -477,7 +630,7 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
     );
   }
 
-  // ── External Tool (Roblox, App Dev, etc.) ────────────────────────────────────
+  // ── External tool ────────────────────────────────────────────────────────────
   if (editorType === "external") {
     return (
       <div className="space-y-4">
@@ -491,14 +644,12 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
             {copiedLink ? "Link Copied!" : "Copy Link"}
           </Button>
         </div>
-
         <div className="rounded-lg border p-4 bg-card text-sm space-y-2">
           <h4 className="font-semibold text-foreground">Instructions:</h4>
           <p className="whitespace-pre-wrap text-muted-foreground leading-relaxed">
             {exercise.instructions || blueprint.instructions}
           </p>
         </div>
-
         {exercise.external_url && (
           <Button asChild className="w-full h-11 text-sm bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow">
             <a href={exercise.external_url} target="_blank" rel="noopener noreferrer">
@@ -507,37 +658,40 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
             </a>
           </Button>
         )}
-
         {isAssignmentActivity && (
           <div className="space-y-3 border rounded-xl p-4 bg-muted/20">
             <h4 className="text-sm font-semibold text-foreground">Submit Your Project Link</h4>
-            <p className="text-xs text-muted-foreground">
-              Once you finish building in Roblox Studio, Thonny, or your tool, paste the project link or share link below:
-            </p>
+            <p className="text-xs text-muted-foreground">Paste the project link or share link once done:</p>
             <div className="flex gap-2">
               <input
                 type="url"
-                placeholder="https://... (Roblox link, GitHub repository, Google Drive, etc.)"
+                placeholder="https://... (Roblox link, GitHub, Google Drive, etc.)"
                 className="flex-1 rounded-md border px-3 py-2 text-sm bg-background"
-                id={`ext-link-${lessonId}`}
+                id={`ext-link-${lessonId}-${activityId}`}
               />
               <Button
                 onClick={async () => {
-                  const input = document.getElementById(`ext-link-${lessonId}`) as HTMLInputElement;
+                  const input = document.getElementById(`ext-link-${lessonId}-${activityId}`) as HTMLInputElement;
                   const link = input?.value?.trim();
                   if (!link) return toast({ title: "Please enter your project link", variant: "destructive" });
                   setSubmitting(true);
                   try {
-                    const { error } = await supabase.from("projects").upsert({
-                      course_id: courseId,
-                      lesson_id: lessonId,
-                      student_id: userProfile?.auth_user_id || user?.id,
-                      title: exercise.title || "External Project",
-                      link,
-                      editor_type: editorType,
-                      review_status: "submitted",
-                      submitted_at: new Date().toISOString(),
-                    }, { onConflict: "course_id,lesson_id,student_id" });
+                    const sid = user?.id;
+                    if (!sid) throw new Error("Not logged in");
+                    const { error } = await supabase.from("projects").upsert(
+                      {
+                        course_id: courseId,
+                        lesson_id: lessonId,
+                        student_id: sid,
+                        title: exercise.title || "External Project",
+                        description: link,
+                        code_content: link,
+                        editor_type: editorType,
+                        review_status: "submitted",
+                        submitted_at: new Date().toISOString(),
+                      },
+                      { onConflict: "course_id,lesson_id,student_id" }
+                    );
                     if (error) throw error;
                     soundEffects.playSuccess();
                     createNotification({
@@ -567,19 +721,26 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
     );
   }
 
-  // ── Monaco Split-Pane Editor (HTML / CSS / JS / Python) ──────────────────────
-  const editorHeight = fullscreen ? "calc(100vh - 160px)" : "480px";
+  // ── Main Monaco Editor ────────────────────────────────────────────────────────
+  const isHtmlMode = editorType === "monaco_html" || editorType === "monaco_css";
+
+  // Fullscreen: render as fixed overlay portal-style
+  const outerCls = fullscreen
+    ? "fixed inset-0 z-[9999] bg-background flex flex-col overflow-hidden"
+    : "flex flex-col space-y-0";
+
+  const editorAreaHeight = fullscreen ? "calc(100vh - 106px)" : "480px";
 
   return (
-    <div className={`space-y-2.5 ${fullscreen ? "fixed inset-0 z-50 bg-background p-4 overflow-auto flex flex-col" : ""}`}>
-      {/* Red Alert Banner for Graded / Debug Projects (as in user's reference) */}
+    <div className={outerCls}>
+      {/* Red alert banner */}
       {(isAssignmentActivity || isDebugMode) && (
-        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3.5 py-2 text-xs flex items-center justify-between text-red-600 dark:text-red-400 font-medium">
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3.5 py-2 text-xs flex items-center justify-between text-red-600 dark:text-red-400 font-medium mx-0 mb-0 rounded-b-none">
           <div className="flex items-center gap-2">
             {isDebugMode ? <Bug className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
             <span>
               {isDebugMode
-                ? "This project is a Debug Challenge — inspect the code, fix the errors, and verify the output below."
+                ? "Debug Challenge — inspect the code, find and fix the errors, then verify the output."
                 : "This project is graded and requires submission using the Submit button below."}
             </span>
           </div>
@@ -589,24 +750,22 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
         </div>
       )}
 
-      {/* Main Controls & Tab Bar (Matching Reference Visual) */}
-      <div className="flex items-center justify-between bg-slate-900 text-slate-100 rounded-t-xl px-3 py-2 border border-slate-800 gap-2 flex-wrap shadow-md">
-        {/* Left: Instructions toggle + Fullscreen */}
+      {/* Toolbar */}
+      <div className="flex items-center justify-between bg-slate-900 text-slate-100 px-3 py-2 border border-slate-800 gap-2 flex-wrap shadow-md">
+        {/* Left */}
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            variant="secondary"
-            onClick={() => setInstructionsOpen(v => !v)}
+            onClick={() => setInstructionsOpen((v) => !v)}
             className="h-8 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-sm border-0"
           >
             <Layout className="w-3.5 h-3.5" />
             {instructionsOpen ? "Hide Instructions" : "Show Instructions"}
           </Button>
-
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setFullscreen(f => !f)}
+            onClick={() => setFullscreen((f) => !f)}
             className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1"
           >
             {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
@@ -614,25 +773,52 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
           </Button>
         </div>
 
-        {/* Center: File Tab */}
-        <div className="flex items-center bg-slate-950 px-3 py-1 rounded-md border border-slate-800 text-xs font-mono text-blue-400 gap-2">
-          <FileCode className="w-3.5 h-3.5 text-blue-400" />
-          <span>{DEFAULT_FILENAMES[editorType] || "project.code"}</span>
+        {/* File tabs row (center) */}
+        <div className="flex items-center gap-1 flex-1 overflow-x-auto min-w-0 px-2">
+          {files.map((f) => (
+            <div
+              key={f.name}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono cursor-pointer border transition-colors ${
+                f.name === activeFile
+                  ? "bg-slate-700 border-slate-600 text-blue-300"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              }`}
+              onClick={() => setActiveFile(f.name)}
+            >
+              <FileCode className="w-3 h-3 text-blue-400 shrink-0" />
+              <span>{f.name}</span>
+              {files.length > 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeFile(f.name); }}
+                  className="text-slate-500 hover:text-red-400 ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={addFile}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-slate-400 hover:text-white hover:bg-slate-800 border border-dashed border-slate-700 transition-colors"
+            title="Add new file"
+          >
+            <Plus className="w-3 h-3" />
+            <span className="hidden sm:inline">New File</span>
+          </button>
         </div>
 
-        {/* Right: Actions (Copy Link, Reset, Save, Submit, Run) */}
+        {/* Right actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
             variant="ghost"
             onClick={handleCopyLink}
             className="h-8 text-xs text-slate-300 hover:text-white hover:bg-slate-800 gap-1"
-            title="Copy direct link to this activity"
+            title="Copy unique project link"
           >
             {copiedLink ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{copiedLink ? "Copied" : "Copy Link"}</span>
           </Button>
-
           <Button
             size="sm"
             variant="ghost"
@@ -643,7 +829,6 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
             <RotateCcw className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Reset</span>
           </Button>
-
           <Button
             size="sm"
             onClick={handleSave}
@@ -653,7 +838,6 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
             <Save className="w-3.5 h-3.5" />
             <span>{saving ? "Saved!" : "Save"}</span>
           </Button>
-
           {isAssignmentActivity && (
             <Button
               size="sm"
@@ -665,35 +849,40 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
               <span>{submitting ? "Sending..." : "Submit"}</span>
             </Button>
           )}
-
-          {canRun && (
-            <Button
-              size="sm"
-              onClick={handleRun}
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 px-3.5 shadow-sm"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Run</span>
-            </Button>
-          )}
+          <Button
+            size="sm"
+            onClick={handleRun}
+            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 px-3.5 shadow-sm"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>Run</span>
+          </Button>
         </div>
       </div>
 
-      {/* Split Pane: Instructions (Left) + Monaco (Center) + Live Output (Right) */}
-      <div className="flex border border-slate-800 rounded-b-xl overflow-hidden shadow-xl bg-slate-950" style={{ height: editorHeight }}>
-        {/* Instructions Side-panel */}
+      {/* Editor + Preview split pane */}
+      <div
+        className="flex border border-slate-800 rounded-b-xl overflow-hidden shadow-xl bg-slate-950"
+        style={{ height: editorAreaHeight }}
+      >
+        {/* Instructions panel */}
         {instructionsOpen && (
-          <div className="w-80 border-r border-slate-800 bg-slate-900/95 flex flex-col shrink-0 text-slate-200">
+          <div className="w-72 border-r border-slate-800 bg-slate-900/95 flex flex-col shrink-0 text-slate-200">
             <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Layout className="w-3.5 h-3.5 text-blue-400" />
                 Step-by-Step Guidance
               </span>
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-white" onClick={() => setInstructionsOpen(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+                onClick={() => setInstructionsOpen(false)}
+              >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
             </div>
-            <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3 prose prose-invert prose-sm max-w-none">
+            <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3">
               <p className="font-semibold text-blue-300 text-sm">{exercise.title}</p>
               <div className="whitespace-pre-wrap text-slate-300 font-sans">
                 {exercise.instructions || blueprint.instructions}
@@ -712,13 +901,13 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
           </button>
         )}
 
-        {/* Monaco Editor Center */}
+        {/* Monaco Editor */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e]">
           <Editor
             height="100%"
-            language={language}
-            value={code}
-            onChange={(val) => setCode(val || "")}
+            language={currentFile.language}
+            value={currentFile.content}
+            onChange={(val) => updateCurrentFile(val || "")}
             onMount={handleEditorDidMount}
             theme="vs-dark"
             options={{
@@ -752,20 +941,32 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
           />
         </div>
 
-        {/* Live Preview / Output Pane */}
-        {output && (
+        {/* Live Preview / Output pane — always rendered when previewOpen */}
+        {previewOpen && (
           <div className="w-80 md:w-96 border-l border-slate-800 flex flex-col bg-slate-900 shrink-0">
             <div className="p-2.5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 font-mono">
                 <Play className="w-3 h-3 text-emerald-400" />
-                {editorType === "monaco_html" ? "LIVE PREVIEW" : "TERMINAL / OUTPUT"}
+                {isHtmlMode ? "LIVE PREVIEW" : "TERMINAL / OUTPUT"}
               </span>
               <div className="flex items-center gap-1">
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-white" onClick={handleRun} title="Rerun">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+                  onClick={handleRerun}
+                  title="Rerun"
+                >
                   <RefreshCw className="w-3 h-3" />
                 </Button>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-white" onClick={() => setOutput(null)}>
-                  <ChevronRight className="w-4 h-4" />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+                  onClick={() => setPreviewOpen(false)}
+                  title="Close preview"
+                >
+                  <X className="w-4 h-4" />
                 </Button>
               </div>
             </div>
@@ -773,7 +974,7 @@ export function ActivityCodeEditor({ exercise, lessonId, courseId, isAssignment 
               ref={iframeRef}
               title="Execution Output"
               className="flex-1 w-full bg-white border-0"
-              sandbox="allow-scripts allow-modals"
+              sandbox="allow-scripts allow-modals allow-same-origin"
             />
           </div>
         )}
