@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Video, BookOpen, Gamepad2, Trash2, Edit, Upload, X, AlertCircle, CheckCircle2, Trophy, GripVertical, Youtube, FileText, HardDrive } from "lucide-react";
+import { Plus, Video, BookOpen, Gamepad2, Trash2, Edit, Upload, X, AlertCircle, CheckCircle2, Trophy, GripVertical, Youtube, FileText, HardDrive, Code2, ExternalLink } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -568,6 +569,23 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
     quiz_data: lesson?.quiz_data || null,
   });
 
+  // Exercises config
+  const [exercises, setExercises] = useState<any[]>(
+    Array.isArray(lesson?.exercises) ? lesson.exercises : []
+  );
+
+  const updateExercise = (index: number, key: string, value: any) => {
+    setExercises(prev => prev.map((ex, i) => i === index ? { ...ex, [key]: value } : ex));
+  };
+
+  const addExercise = () => {
+    setExercises(prev => [...prev, { title: `Exercise ${prev.length + 1}`, type: "practice", editor_type: "none", is_assignment: false }]);
+  };
+
+  const removeExercise = (index: number) => {
+    setExercises(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleExerciseVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -710,6 +728,7 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
       youtube_urls: youtubeUrls,
       exercise_video_urls: exerciseVideos,
       exercise_youtube_urls: exerciseYoutubeUrls,
+      exercises: exercises,
       assignment_required: formData.assignment_required,
       quiz_required: formData.quiz_required,
       is_end_of_course: formData.is_end_of_course,
@@ -717,6 +736,7 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
       quiz_data: formData.quiz_data,
     });
   };
+
 
   return (
     <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -1007,9 +1027,121 @@ function LessonEditDialog({ lesson, onSave, onCancel }: {
 
         <Separator />
 
+        {/* Exercises Configuration */}
+        <div className="space-y-4 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold flex items-center gap-2 text-blue-800 dark:text-blue-300">
+              <Code2 className="w-4 h-4" />
+              Exercises &amp; Activities
+            </h3>
+            <Button type="button" size="sm" variant="outline" onClick={addExercise} className="h-7 text-xs">
+              <Plus className="w-3 h-3 mr-1" />
+              Add Exercise
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Configure the editor type for each exercise. Students will see a code editor, Scratch, or an external tool link based on this setting.
+          </p>
+
+          {exercises.length === 0 && (
+            <p className="text-xs text-center text-muted-foreground py-3">No exercises yet. Click "Add Exercise" to add one.</p>
+          )}
+
+          <div className="space-y-3">
+            {exercises.map((ex: any, index: number) => (
+              <div key={index} className="rounded-lg border bg-background p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={ex.title || ""}
+                    onChange={e => updateExercise(index, "title", e.target.value)}
+                    placeholder="Exercise title"
+                    className="h-8 text-sm flex-1"
+                  />
+                  <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-500 hover:text-red-600" onClick={() => removeExercise(index)}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Editor Type</Label>
+                    <Select value={ex.editor_type || "none"} onValueChange={v => updateExercise(index, "editor_type", v)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None (text/link only)</SelectItem>
+                        <SelectItem value="monaco_html">HTML Editor</SelectItem>
+                        <SelectItem value="monaco_js">JavaScript Editor</SelectItem>
+                        <SelectItem value="monaco_python">Python Editor</SelectItem>
+                        <SelectItem value="monaco_css">CSS Editor</SelectItem>
+                        <SelectItem value="scratch">Scratch</SelectItem>
+                        <SelectItem value="external">External Tool (Roblox, etc.)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Type</Label>
+                    <div className="flex items-center gap-2 h-8">
+                      <Switch
+                        id={`is-assignment-${index}`}
+                        checked={!!ex.is_assignment}
+                        onCheckedChange={v => updateExercise(index, "is_assignment", v)}
+                      />
+                      <Label htmlFor={`is-assignment-${index}`} className="text-xs cursor-pointer">
+                        {ex.is_assignment ? "Assignment (Save + Submit)" : "Exercise (Save only)"}
+                      </Label>
+                    </div>
+                  </div>
+                </div>
+
+                {ex.editor_type === "external" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs flex items-center gap-1"><ExternalLink className="w-3 h-3" />External Editor URL</Label>
+                    <Input
+                      value={ex.external_url || ""}
+                      onChange={e => updateExercise(index, "external_url", e.target.value)}
+                      placeholder="https://roblox.com/... or https://thonny.org/..."
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Instructions (shown in editor panel)</Label>
+                  <Textarea
+                    value={ex.instructions || ""}
+                    onChange={e => updateExercise(index, "instructions", e.target.value)}
+                    placeholder="Step-by-step instructions shown beside the code editor..."
+                    rows={2}
+                    className="text-xs"
+                  />
+                </div>
+
+                {(ex.editor_type?.startsWith("monaco_")) && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Starter Code (optional)</Label>
+                    <Textarea
+                      value={ex.starter_code || ""}
+                      onChange={e => updateExercise(index, "starter_code", e.target.value)}
+                      placeholder="Pre-filled code students start with..."
+                      rows={2}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Separator />
+
         {/* Completion Requirements */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold">Completion Requirements</h3>
+
           
           <Alert>
             <AlertCircle className="h-4 w-4" />
