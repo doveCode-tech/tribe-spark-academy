@@ -28,7 +28,8 @@ import {
   AlertCircle,
   Lightbulb,
   Volume2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Loader2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -171,6 +172,54 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
   }, [lesson]);
 
   // ── Video Handlers ─────────────────────────────────────────────────────────
+  const [uploadingState, setUploadingState] = useState<Record<string, boolean>>({});
+
+  const handleDirectUpload = async (
+    file: File,
+    onSuccess: (url: string) => void,
+    uploadKey: string,
+    folder: string = "activity-media"
+  ) => {
+    if (!file) return;
+    setUploadingState((prev) => ({ ...prev, [uploadKey]: true }));
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const path = `${courseId || "general"}/${folder}/${Date.now()}-${safeName}`;
+
+      let pubUrl = "";
+      const { error: upErr } = await supabase.storage
+        .from("lesson-videos")
+        .upload(path, file, { upsert: true });
+
+      if (!upErr) {
+        const { data } = supabase.storage.from("lesson-videos").getPublicUrl(path);
+        pubUrl = data.publicUrl;
+      } else {
+        const { error: fallbackErr } = await supabase.storage
+          .from("admin-assets")
+          .upload(path, file, { upsert: true });
+        if (fallbackErr) throw fallbackErr;
+        const { data } = supabase.storage.from("admin-assets").getPublicUrl(path);
+        pubUrl = data.publicUrl;
+      }
+
+      onSuccess(pubUrl);
+      toast({
+        title: "File Uploaded Successfully 📁",
+        description: `${file.name} uploaded and attached.`,
+      });
+    } catch (err: any) {
+      console.error("Direct upload failed:", err);
+      toast({
+        title: "Upload Failed",
+        description: err.message || "Could not upload file to storage.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingState((prev) => ({ ...prev, [uploadKey]: false }));
+    }
+  };
+
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -650,30 +699,138 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                         <span>9. Sample Project &amp; Expected Outcome Preview (Shown to students as target model)</span>
                       </Label>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Add a sample screenshot or video showing what the project should look like upon completion.
+                        Add a sample screenshot or video showing what the project should look like upon completion. Upload directly from your computer or paste a URL.
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-lg border border-blue-500/20 bg-blue-500/5">
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-semibold text-muted-foreground">Sample Project Outcome Screenshot / Image URL</Label>
-                      <Input
-                        placeholder="https://... image URL (Scratch screenshot, finished app, etc.)"
-                        value={act.sample_project_image_url || ""}
-                        onChange={(e) => updateActivity(index, "sample_project_image_url", e.target.value)}
-                        className="h-8 text-xs bg-background"
-                      />
+                    {/* Sample Project Screenshot */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px] font-semibold text-muted-foreground">Sample Project Outcome Screenshot / Image</Label>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingState[`sample_img_${act.id}`]}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleDirectUpload(
+                                  file,
+                                  (url) => updateActivity(index, "sample_project_image_url", url),
+                                  `sample_img_${act.id}`,
+                                  "sample-projects"
+                                );
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            asChild
+                            disabled={uploadingState[`sample_img_${act.id}`]}
+                            className="h-6 px-2 text-[10px] gap-1 border-blue-400/40 text-blue-600 hover:bg-blue-50 hover:text-blue-700 cursor-pointer pointer-events-none"
+                          >
+                            <span>
+                              {uploadingState[`sample_img_${act.id}`] ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Upload className="w-3 h-3" />
+                              )}
+                              Upload from Computer
+                            </span>
+                          </Button>
+                        </label>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Paste image link or upload from computer..."
+                          value={act.sample_project_image_url || ""}
+                          onChange={(e) => updateActivity(index, "sample_project_image_url", e.target.value)}
+                          className="h-8 text-xs bg-background"
+                        />
+                        {act.sample_project_image_url && (
+                          <a
+                            href={act.sample_project_image_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="h-8 px-2.5 rounded-md border flex items-center justify-center text-[11px] bg-background hover:bg-muted text-blue-600 shrink-0"
+                            title="Preview image"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-semibold text-muted-foreground">Sample Project Demonstration Video URL (Optional)</Label>
-                      <Input
-                        placeholder="https://youtube.com/... or direct video link"
-                        value={act.sample_project_video_url || ""}
-                        onChange={(e) => updateActivity(index, "sample_project_video_url", e.target.value)}
-                        className="h-8 text-xs bg-background"
-                      />
+
+                    {/* Sample Project Demonstration Video */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px] font-semibold text-muted-foreground">Sample Project Demonstration Video (Optional)</Label>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="video/*"
+                            className="hidden"
+                            disabled={uploadingState[`sample_vid_${act.id}`]}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleDirectUpload(
+                                  file,
+                                  (url) => updateActivity(index, "sample_project_video_url", url),
+                                  `sample_vid_${act.id}`,
+                                  "sample-projects"
+                                );
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            asChild
+                            disabled={uploadingState[`sample_vid_${act.id}`]}
+                            className="h-6 px-2 text-[10px] gap-1 border-blue-400/40 text-blue-600 hover:bg-blue-50 hover:text-blue-700 cursor-pointer pointer-events-none"
+                          >
+                            <span>
+                              {uploadingState[`sample_vid_${act.id}`] ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Upload className="w-3 h-3" />
+                              )}
+                              Upload from Computer
+                            </span>
+                          </Button>
+                        </label>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Paste YouTube / direct video link or upload..."
+                          value={act.sample_project_video_url || ""}
+                          onChange={(e) => updateActivity(index, "sample_project_video_url", e.target.value)}
+                          className="h-8 text-xs bg-background"
+                        />
+                        {act.sample_project_video_url && (
+                          <a
+                            href={act.sample_project_video_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="h-8 px-2.5 rounded-md border flex items-center justify-center text-[11px] bg-background hover:bg-muted text-blue-600 shrink-0"
+                            title="Preview video"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
+
                     <div className="space-y-1 md:col-span-2">
                       <Label className="text-[11px] font-semibold text-muted-foreground">Guidance Note for Sample Project</Label>
                       <Input
@@ -695,7 +852,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                         <span>10. Step Hints &amp; Guidance (Short Video Clip, Text Clue, Image, or Voice Note)</span>
                       </Label>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Displayed to students inside an expandable "Need a hint? +" accordion on each step.
+                        Displayed to students inside an expandable "Need a hint? +" accordion on each step. Upload directly from your computer or paste a URL.
                       </p>
                     </div>
                     <Button
@@ -760,8 +917,8 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                             </Button>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1">
                               <Label className="text-[11px] text-muted-foreground font-medium">Text Clue / Explanation</Label>
                               <Input
                                 placeholder="Clue or step guidance..."
@@ -774,10 +931,55 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                 className="h-7 text-xs bg-background"
                               />
                             </div>
-                            <div>
-                              <Label className="text-[11px] text-muted-foreground font-medium">Short Video Clip URL (YouTube, MP4)</Label>
+
+                            {/* Video Clip Hint */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[11px] text-muted-foreground font-medium">Short Video Clip</Label>
+                                <label className="cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="video/*"
+                                    className="hidden"
+                                    disabled={uploadingState[`hint_vid_${act.id}_${hIdx}`]}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        handleDirectUpload(
+                                          file,
+                                          (url) => {
+                                            const copy = [...(act.hints || [])];
+                                            copy[hIdx] = { ...copy[hIdx], video_url: url };
+                                            updateActivity(index, "hints", copy);
+                                          },
+                                          `hint_vid_${act.id}_${hIdx}`,
+                                          "hints"
+                                        );
+                                      }
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    asChild
+                                    disabled={uploadingState[`hint_vid_${act.id}_${hIdx}`]}
+                                    className="h-5 px-1.5 text-[9px] gap-1 border-amber-400/50 text-amber-700 hover:bg-amber-100/50 cursor-pointer pointer-events-none"
+                                  >
+                                    <span>
+                                      {uploadingState[`hint_vid_${act.id}_${hIdx}`] ? (
+                                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                      ) : (
+                                        <Upload className="w-2.5 h-2.5" />
+                                      )}
+                                      Upload Video
+                                    </span>
+                                  </Button>
+                                </label>
+                              </div>
                               <Input
-                                placeholder="https://youtube.com/watch?v=... or .mp4"
+                                placeholder="Paste link or upload video clip..."
                                 value={hint.video_url || ""}
                                 onChange={(e) => {
                                   const copy = [...(act.hints || [])];
@@ -787,10 +989,55 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                 className="h-7 text-xs bg-background"
                               />
                             </div>
-                            <div>
-                              <Label className="text-[11px] text-muted-foreground font-medium">Image / Code Snapshot URL</Label>
+
+                            {/* Image Hint */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[11px] text-muted-foreground font-medium">Image / Code Snapshot</Label>
+                                <label className="cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    disabled={uploadingState[`hint_img_${act.id}_${hIdx}`]}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        handleDirectUpload(
+                                          file,
+                                          (url) => {
+                                            const copy = [...(act.hints || [])];
+                                            copy[hIdx] = { ...copy[hIdx], image_url: url };
+                                            updateActivity(index, "hints", copy);
+                                          },
+                                          `hint_img_${act.id}_${hIdx}`,
+                                          "hints"
+                                        );
+                                      }
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    asChild
+                                    disabled={uploadingState[`hint_img_${act.id}_${hIdx}`]}
+                                    className="h-5 px-1.5 text-[9px] gap-1 border-amber-400/50 text-amber-700 hover:bg-amber-100/50 cursor-pointer pointer-events-none"
+                                  >
+                                    <span>
+                                      {uploadingState[`hint_img_${act.id}_${hIdx}`] ? (
+                                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                      ) : (
+                                        <Upload className="w-2.5 h-2.5" />
+                                      )}
+                                      Upload Image
+                                    </span>
+                                  </Button>
+                                </label>
+                              </div>
                               <Input
-                                placeholder="https://... image URL"
+                                placeholder="Paste link or upload screenshot..."
                                 value={hint.image_url || ""}
                                 onChange={(e) => {
                                   const copy = [...(act.hints || [])];
@@ -800,10 +1047,55 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                 className="h-7 text-xs bg-background"
                               />
                             </div>
-                            <div>
-                              <Label className="text-[11px] text-muted-foreground font-medium">Audio Voice URL (For kids)</Label>
+
+                            {/* Audio Hint */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-[11px] text-muted-foreground font-medium">Audio Voice Note</Label>
+                                <label className="cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="audio/*"
+                                    className="hidden"
+                                    disabled={uploadingState[`hint_aud_${act.id}_${hIdx}`]}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        handleDirectUpload(
+                                          file,
+                                          (url) => {
+                                            const copy = [...(act.hints || [])];
+                                            copy[hIdx] = { ...copy[hIdx], audio_url: url };
+                                            updateActivity(index, "hints", copy);
+                                          },
+                                          `hint_aud_${act.id}_${hIdx}`,
+                                          "hints"
+                                        );
+                                      }
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    asChild
+                                    disabled={uploadingState[`hint_aud_${act.id}_${hIdx}`]}
+                                    className="h-5 px-1.5 text-[9px] gap-1 border-amber-400/50 text-amber-700 hover:bg-amber-100/50 cursor-pointer pointer-events-none"
+                                  >
+                                    <span>
+                                      {uploadingState[`hint_aud_${act.id}_${hIdx}`] ? (
+                                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                      ) : (
+                                        <Upload className="w-2.5 h-2.5" />
+                                      )}
+                                      Upload Audio
+                                    </span>
+                                  </Button>
+                                </label>
+                              </div>
                               <Input
-                                placeholder="https://... audio.mp3"
+                                placeholder="Paste link or upload voice note..."
                                 value={hint.audio_url || ""}
                                 onChange={(e) => {
                                   const copy = [...(act.hints || [])];
