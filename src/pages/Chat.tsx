@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { LMSLayout } from "@/components/LMSLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const quickQuestions = [
 ];
 
 const Chat = () => {
+  const [searchParams] = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -94,7 +96,7 @@ const Chat = () => {
   return (
     <LMSLayout>
       <div className="max-w-6xl mx-auto space-y-4">
-        <Tabs defaultValue="live" className="w-full">
+        <Tabs defaultValue={searchParams.get("tab") === "ai" ? "ai" : "live"} className="w-full">
           <div className="flex items-center justify-between mb-4">
             <TabsList className="bg-card border border-border p-1">
               <TabsTrigger value="live" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-semibold">

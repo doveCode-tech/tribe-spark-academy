@@ -25,7 +25,7 @@ export function LMSLayout({ children }: LMSLayoutProps) {
           <header className="h-16 border-b border-border bg-card shadow-sm">
             <div className="h-full px-6 flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <SidebarTrigger className="lg:hidden" />
+                <SidebarTrigger title="Collapse or expand sidebar" />
                 <h1 className="text-xl font-semibold text-foreground hidden sm:block">
                   STEMTribe Learning Management System
                 </h1>
