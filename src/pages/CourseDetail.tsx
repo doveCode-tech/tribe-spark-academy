@@ -185,6 +185,22 @@ export default function CourseDetail() {
 
       if (error) throw error;
 
+      // Record learning activity for streak tracking
+      await supabase.rpc('record_learning_activity', {
+        _activity_type: 'lesson_complete',
+        _lesson_id: lessonId,
+        _course_id: courseId,
+        _points: 1
+      });
+
+      // Award streak badges if applicable
+      try {
+        await supabase.rpc('award_streak_badges');
+      } catch (badgeError) {
+        console.error('Error awarding streak badges:', badgeError);
+        // Don't fail the lesson completion if badge awarding fails
+      }
+
       // Refresh data
       fetchCourseData();
 

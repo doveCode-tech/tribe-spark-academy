@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { HeroSection } from "./HeroSection";
 import { CourseCard } from "./CourseCard";
 import { StudentProjectsList } from "./StudentProjectsList";
+import { StreakDisplay } from "./StreakDisplay";
+import { LearningCalendar } from "./LearningCalendar";
 
 
 export function StudentDashboard() {
@@ -204,7 +206,7 @@ export function StudentDashboard() {
           <CardContent className="p-4 text-center">
             <Sparkles className="w-8 h-8 mx-auto text-warning mb-2" />
             <div className="text-2xl font-bold text-warning">0</div>
-            <div className="text-sm text-muted-foreground">Streak Days</div>
+            <div className="text-sm text-muted-foreground">Certificates</div>
           </CardContent>
         </Card>
       </div>
@@ -253,8 +255,14 @@ export function StudentDashboard() {
           <StudentProjectsList />
         </div>
 
-        {/* Sidebar - Achievements and AI Recommendations */}
+        {/* Sidebar - Learning Calendar and Achievements */}
         <div className="space-y-6">
+          {/* Streak Display */}
+          <StreakDisplay />
+
+          {/* Learning Calendar */}
+          <LearningCalendar />
+
           {/* Recent Achievements */}
           <Card className="shadow-card">
             <CardHeader>

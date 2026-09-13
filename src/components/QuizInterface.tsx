@@ -115,6 +115,23 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
 
       if (error) throw error;
 
+      // Record learning activity for streak tracking (only for passed quizzes)
+      if (isPassed) {
+        await supabase.rpc('record_learning_activity', {
+          _activity_type: 'quiz_complete',
+          _course_id: quiz.course_id,
+          _points: 2 // Quizzes worth more points
+        });
+
+        // Award streak badges if applicable
+        try {
+          await supabase.rpc('award_streak_badges');
+        } catch (badgeError) {
+          console.error('Error awarding streak badges:', badgeError);
+          // Don't fail the quiz submission if badge awarding fails
+        }
+      }
+
       // Generate certificate if passed
       if (isPassed && attemptData) {
         await supabase.rpc('generate_certificate', {

@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Props { courseId: string; }
 
 export function ProjectSubmission({ courseId }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [link, setLink] = useState("");
@@ -28,30 +30,53 @@ export function ProjectSubmission({ courseId }: Props) {
         file_path = path;
       }
 
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      const { data: project, error } = await supabase.from('projects').insert({
-        course_id: courseId,
-        title: title || 'Project submission',
-        description: description || null,
-        link: link || null,
-        file_path,
-      }).select().single();
+      // Use the secure RPC function for project submission
+      const { data: projectResult, error: rpcError } = await supabase.rpc('submit_student_project', {
+        _course_id: courseId,
+        _title: title || 'Project submission',
+        _description: description || null,
+        _link: link || null,
+        _file_path: file_path
+      });
 
-      if (error) throw error;
+      if (rpcError) throw rpcError;
+
+      const projectId = projectResult?.id;
+
+      // Record learning activity for streak tracking
+      try {
+        await supabase.rpc('record_learning_activity', {
+          _activity_type: 'project_submit',
+          _course_id: courseId,
+          _points: 3 // Projects worth the most points
+        });
+      } catch (streakError) {
+        console.error('Failed to record learning activity:', streakError);
+        // Don't fail the submission if streak tracking fails
+      }
+
+      // Award streak badges if applicable
+      try {
+        await supabase.rpc('award_streak_badges');
+      } catch (badgeError) {
+        console.error('Failed to award streak badges:', badgeError);
+        // Don't fail the submission if badge awarding fails
+      }
 
       // Notify admins and tutors
       try {
-        await supabase.functions.invoke('notify-project-submission', {
-          body: {
-            projectId: project.id,
-            courseId: courseId,
-            studentId: user.id,
-            projectTitle: title || 'Project submission',
-          }
-        });
+        if (projectId) {
+          await supabase.functions.invoke('notify-project-submission', {
+            body: {
+              projectId: projectId,
+              courseId: courseId,
+              studentId: user.id,
+              projectTitle: title || 'Project submission',
+            }
+          });
+        }
       } catch (notifError) {
         console.error('Failed to send notifications:', notifError);
         // Don't fail the submission if notifications fail
