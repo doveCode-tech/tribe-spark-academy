@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, FileText, Upload, X, Save, Mail, Award, Edit } from "lucide-react";
+import { Search, FileText, Upload, X, Save, Mail, Award, Edit, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { StudentDetailDialog } from "@/components/StudentDetailDialog";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,8 @@ export function StudentsList() {
   const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
   const [existingReport, setExistingReport] = useState<any>(null);
   const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
+  const [detailStudent, setDetailStudent] = useState<Student | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const isTutor = userProfile?.role === 'tutor' || userProfile?.role === 'ultimate_tutor';
   const isAdmin = userProfile?.role === 'admin';
@@ -521,7 +524,18 @@ export function StudentsList() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setDetailStudent(student);
+                      setDetailOpen(true);
+                    }}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Details
+                  </Button>
                   {isTutor && (
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                        <DialogTrigger asChild>
@@ -782,6 +796,14 @@ export function StudentsList() {
           </div>
         </CardContent>
       </Card>
+      {detailStudent && (
+        <StudentDetailDialog
+          studentId={detailStudent.auth_user_id}
+          studentName={getStudentDisplayName(detailStudent)}
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+        />
+      )}
     </div>
   );
 }

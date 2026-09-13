@@ -25,10 +25,20 @@ import {
   EyeOff, 
   CheckCircle2, 
   Trophy,
-  AlertCircle
+  AlertCircle,
+  Lightbulb,
+  Volume2,
+  Image as ImageIcon
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+export interface ActivityHint {
+  step?: number;
+  text?: string;
+  image_url?: string;
+  audio_url?: string;
+}
 
 export interface ActivityItem {
   id: string;
@@ -41,6 +51,7 @@ export interface ActivityItem {
   is_assignment: boolean;
   status: "published" | "draft";
   type?: string;
+  hints?: ActivityHint[];
 }
 
 export interface LessonData {
@@ -597,6 +608,119 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                       onCheckedChange={v => updateActivity(index, "status", v ? "published" : "draft")}
                     />
                   </div>
+                </div>
+
+                {/* 9. Step Hints & Audio Guidance */}
+                <div className="space-y-2 pt-3 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                      <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                      <span>9. Step Hints &amp; Audio Guidance (Text, Code Snapshots, Voice Instructions)</span>
+                    </Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 border-amber-500/40 text-amber-600 hover:bg-amber-50"
+                      onClick={() => {
+                        const currentHints = act.hints || [];
+                        updateActivity(index, "hints", [
+                          ...currentHints,
+                          { step: 1, text: "", image_url: "", audio_url: "" }
+                        ]);
+                      }}
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Step Hint</span>
+                    </Button>
+                  </div>
+
+                  {act.hints && act.hints.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      {act.hints.map((hint, hIdx) => (
+                        <div key={hIdx} className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-amber-800 dark:text-amber-200">Hint for:</span>
+                              <Select
+                                value={String(hint.step || 1)}
+                                onValueChange={(val) => {
+                                  const copy = [...(act.hints || [])];
+                                  copy[hIdx] = { ...copy[hIdx], step: Number(val) };
+                                  updateActivity(index, "hints", copy);
+                                }}
+                              >
+                                <SelectTrigger className="h-7 text-xs w-28">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">Step 1</SelectItem>
+                                  <SelectItem value="2">Step 2</SelectItem>
+                                  <SelectItem value="3">Step 3</SelectItem>
+                                  <SelectItem value="4">Step 4</SelectItem>
+                                  <SelectItem value="5">Step 5</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-500 hover:text-red-600"
+                              onClick={() => {
+                                const copy = (act.hints || []).filter((_, i) => i !== hIdx);
+                                updateActivity(index, "hints", copy);
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <div>
+                              <Label className="text-[11px] text-muted-foreground">Text Clue / Explanation</Label>
+                              <Input
+                                placeholder="Clue or step details..."
+                                value={hint.text || ""}
+                                onChange={(e) => {
+                                  const copy = [...(act.hints || [])];
+                                  copy[hIdx] = { ...copy[hIdx], text: e.target.value };
+                                  updateActivity(index, "hints", copy);
+                                }}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] text-muted-foreground">Image / Code Snapshot URL</Label>
+                              <Input
+                                placeholder="https://... image URL"
+                                value={hint.image_url || ""}
+                                onChange={(e) => {
+                                  const copy = [...(act.hints || [])];
+                                  copy[hIdx] = { ...copy[hIdx], image_url: e.target.value };
+                                  updateActivity(index, "hints", copy);
+                                }}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] text-muted-foreground">Audio Voice URL (For kids)</Label>
+                              <Input
+                                placeholder="https://... audio.mp3"
+                                value={hint.audio_url || ""}
+                                onChange={(e) => {
+                                  const copy = [...(act.hints || [])];
+                                  copy[hIdx] = { ...copy[hIdx], audio_url: e.target.value };
+                                  updateActivity(index, "hints", copy);
+                                }}
+                                className="h-7 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

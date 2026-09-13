@@ -25,7 +25,14 @@ import {
   X,
   Download,
   Zap,
+  Lightbulb,
+  Image as ImageIcon,
+  Edit2,
+  Volume2,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +49,13 @@ export type EditorType =
   | "none";
 export type ProjectMode = "standard" | "starter" | "debug";
 
+export interface ExerciseHint {
+  step?: number;
+  text?: string;
+  image_url?: string;
+  audio_url?: string;
+}
+
 export interface Exercise {
   id?: string;
   title: string;
@@ -53,6 +67,7 @@ export interface Exercise {
   starter_code?: string;
   solution_code?: string;
   is_assignment?: boolean;
+  hints?: ExerciseHint[];
 }
 
 interface ActivityCodeEditorProps {
@@ -248,34 +263,57 @@ body {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function buildHtmlOutput(files: FileTab[]): string {
-  const htmlFile = files.find((f) => f.name === "index.html" || f.language === "html");
-  const cssFiles = files.filter((f) => f.language === "css");
-  const jsFiles = files.filter((f) => f.language === "javascript");
+  // Locate primary HTML file
+  const htmlFile = files.find((f) => f.name.endsWith(".html")) || files[0];
+  const cssFiles = files.filter((f) => f.name.endsWith(".css") || f.language === "css");
+  const jsFiles = files.filter((f) => f.name.endsWith(".js") || f.language === "javascript");
 
-  if (!htmlFile) return "<p>No HTML file found.</p>";
+  if (!htmlFile) return "<p style='color:#ef4444;font-family:sans-serif;'>No HTML file found.</p>";
 
-  let html = htmlFile.content;
+  let html = htmlFile.content || "";
 
-  // Inject CSS files before </head>
-  if (cssFiles.length > 0) {
-    const cssTag = cssFiles
-      .map((f) => `<style>/* ${f.name} */\n${f.content}\n</style>`)
-      .join("\n");
-    html = html.replace("</head>", `${cssTag}\n</head>`);
-  }
+  // 1. Resolve explicit <link rel="stylesheet" href="..."> matching custom css files
+  cssFiles.forEach((css) => {
+    const linkRegex = new RegExp(`<link[^>]*href=["'](?:\\.\\/)?${css.name}["'][^>]*>`, "gi");
+    if (linkRegex.test(html)) {
+      html = html.replace(linkRegex, `<style>/* ${css.name} */\n${css.content}\n</style>`);
+    } else {
+      // If student forgot to link or has a generic link, inject before </head> or at top
+      const styleTag = `<style>/* Auto-linked ${css.name} */\n${css.content}\n</style>`;
+      if (html.includes("</head>")) {
+        html = html.replace("</head>", `${styleTag}\n</head>`);
+      } else {
+        html = `${styleTag}\n${html}`;
+      }
+    }
+  });
 
-  // Inject JS files before </body>
-  if (jsFiles.length > 0) {
-    const jsTag = jsFiles
-      .map((f) => `<script>/* ${f.name} */\n${f.content}\n</script>`)
-      .join("\n");
-    html = html.replace("</body>", `${jsTag}\n</body>`);
-  }
+  // 2. Resolve explicit <script src="..."> matching custom js files
+  jsFiles.forEach((js) => {
+    const scriptRegex = new RegExp(`<script[^>]*src=["'](?:\\.\\/)?${js.name}["'][^>]*>\\s*<\\/script>`, "gi");
+    if (scriptRegex.test(html)) {
+      html = html.replace(scriptRegex, `<script>/* ${js.name} */\n${js.content}\n</script>`);
+    } else {
+      const scriptTag = `<script>/* Auto-linked ${js.name} */\n${js.content}\n</script>`;
+      if (html.includes("</body>")) {
+        html = html.replace("</body>", `${scriptTag}\n</body>`);
+      } else {
+        html = `${html}\n${scriptTag}`;
+      }
+    }
+  });
 
   return html;
 }
 
-function buildJsOutput(code: string): string {
+function buildJsOutput(code: string, files?: FileTab[]): string {
+  // If multiple JS files exist, combine other modules first
+  let prependedModules = "";
+  if (files && files.length > 1) {
+    const otherJs = files.filter(f => (f.name.endsWith(".js") || f.language === "javascript") && f.content !== code);
+    prependedModules = otherJs.map(f => `/* Module ${f.name} */\n${f.content}\n`).join("\n");
+  }
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -303,6 +341,7 @@ function buildJsOutput(code: string): string {
     console.warn = (...args) => append('[WARN] ' + args.join(' '), false);
     window.onerror = (msg, url, line) => append('❌ Error at line ' + line + ': ' + msg, true);
     try {
+      ${prependedModules}
       ${code}
     } catch(e) {
       append('❌ Runtime Error: ' + e.message, true);
@@ -312,36 +351,66 @@ function buildJsOutput(code: string): string {
 </html>`;
 }
 
-function buildPythonOutput(code: string): string {
-  // Simple simulation — real Python requires a WASM interpreter (Pyodide)
-  // We'll do a best-effort parse of print() calls
-  const lines = code.split("\n");
+function buildPythonOutput(currentCode: string, allFiles: FileTab[]): string {
+  // Support multi-file Python: student can define modules in file2.py and 'import file2' or 'from file2 import ...'
+  const pythonFiles = allFiles.filter(f => f.name.endsWith(".py") || f.language === "python");
+  const moduleMap: Record<string, string> = {};
+
+  pythonFiles.forEach(f => {
+    const modName = f.name.replace(/\.py$/i, "");
+    moduleMap[modName] = f.content;
+  });
+
+  // Check imports in current code
+  let combinedCode = currentCode;
+  const lines = currentCode.split("\n");
   const outputs: string[] = [];
   let hasError = false;
   let errorMsg = "";
 
-  // Detect common syntax errors
+  // Inline imported module definitions so functions and variables are available
+  const inlinedModules: string[] = [];
+  lines.forEach(line => {
+    const impMatch = line.match(/^\s*(?:import\s+([\w_]+)|from\s+([\w_]+)\s+import\s+(.+))/);
+    if (impMatch) {
+      const mod = impMatch[1] || impMatch[2];
+      if (moduleMap[mod] && !inlinedModules.includes(mod)) {
+        inlinedModules.push(mod);
+      }
+    }
+  });
+
+  if (inlinedModules.length > 0) {
+    const modulePrefix = inlinedModules.map(m => `# --- Module: ${m} ---\n${moduleMap[m]}`).join("\n\n");
+    combinedCode = `${modulePrefix}\n\n# --- Main Program ---\n${currentCode}`;
+  }
+
+  // Syntax & Error checks
   const syntaxChecks = [
     { re: /if\s+\w+\s*=[^=]/, msg: "SyntaxError: invalid syntax (did you mean == instead of =?)" },
     { re: /^\s*def\s+\w+[^(]/, msg: "SyntaxError: missing parentheses in function definition" },
   ];
   for (const chk of syntaxChecks) {
-    if (chk.re.test(code)) {
+    if (chk.re.test(currentCode)) {
       hasError = true;
       errorMsg = chk.msg;
       break;
     }
   }
 
+  // Parse simulated print outputs and variable resolutions across combined code
   if (!hasError) {
-    for (const line of lines) {
+    const allLines = combinedCode.split("\n");
+    for (const line of allLines) {
       const m = line.match(/^\s*print\s*\((.+)\)\s*$/);
       if (m) {
         const inner = m[1].trim().replace(/^['"`]|['"`]$/g, "").replace(/f['"](.+)['"]/, "$1");
         outputs.push(inner);
       }
     }
-    if (outputs.length === 0) outputs.push("Program executed with 0 errors.");
+    if (outputs.length === 0) {
+      outputs.push("Program executed with 0 errors.");
+    }
   }
 
   const display = hasError
@@ -351,8 +420,10 @@ function buildPythonOutput(code: string): string {
   return `<!DOCTYPE html><html><head><style>
     body { font-family: 'Consolas', monospace; font-size: 13px; background: #0f172a; color: #4ade80; padding: 16px; margin: 0; }
     .header { color: #94a3b8; margin-bottom: 12px; font-size: 11px; }
+    .imported { color: #38bdf8; font-size: 11px; margin-bottom: 8px; }
   </style></head><body>
-  <div class="header">▶ Python 3.x Interactive Environment (STEMTribe)</div>
+  <div class="header">▶ Python 3.x Environment (STEMTribe)</div>
+  ${inlinedModules.length > 0 ? `<div class="imported">📦 Loaded modules: ${inlinedModules.join(", ")}.py</div>` : ""}
   <div>${display}</div>
 </body></html>`;
 }
@@ -462,24 +533,64 @@ export function ActivityCodeEditor({
     );
   };
 
-  // ── Add new file ────────────────────────────────────────────────────────────
-  const addFile = () => {
-    const extras = EXTRA_FILE_TEMPLATES[editorType] || [];
-    const existingNames = files.map((f) => f.name);
-    const newFile = extras.find((e) => !existingNames.includes(e.name));
-    if (newFile) {
-      const tab: FileTab = { ...newFile };
-      setFiles((prev) => [...prev, tab]);
-      setActiveFile(tab.name);
-    } else {
-      // Generic new file
-      let idx = files.length;
-      let name = `file${idx}.${mainLanguage === "html" ? "html" : mainLanguage === "javascript" ? "js" : mainLanguage === "css" ? "css" : "py"}`;
-      while (existingNames.includes(name)) { idx++; name = `file${idx}.${name.split(".").pop()}`; }
-      const tab: FileTab = { name, language: mainLanguage, content: "" };
-      setFiles((prev) => [...prev, tab]);
-      setActiveFile(tab.name);
+  // ── Custom File Dialog States ────────────────────────────────────────────────
+  const [newFileDialogOpen, setNewFileDialogOpen] = useState(false);
+  const [newFileNameInput, setNewFileNameInput] = useState("");
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [targetRenameFile, setTargetRenameFile] = useState("");
+  const [renameInput, setRenameInput] = useState("");
+
+  const handleOpenNewFileDialog = () => {
+    const ext = mainLanguage === "html" ? "html" : mainLanguage === "javascript" ? "js" : mainLanguage === "css" ? "css" : "py";
+    setNewFileNameInput(`file${files.length}.${ext}`);
+    setNewFileDialogOpen(true);
+  };
+
+  const handleConfirmNewFile = (presetName?: string) => {
+    const nameToUse = (presetName || newFileNameInput).trim();
+    if (!nameToUse) return;
+
+    if (files.some(f => f.name.toLowerCase() === nameToUse.toLowerCase())) {
+      toast({ title: "File exists", description: `A file named "${nameToUse}" already exists.`, variant: "destructive" });
+      return;
     }
+
+    const inferredLang = nameToUse.endsWith(".css") ? "css" : nameToUse.endsWith(".js") ? "javascript" : nameToUse.endsWith(".py") ? "python" : "html";
+    const tab: FileTab = { name: nameToUse, language: inferredLang, content: "" };
+    setFiles((prev) => [...prev, tab]);
+    setActiveFile(tab.name);
+    setNewFileDialogOpen(false);
+    setNewFileNameInput("");
+    toast({ title: "File Created", description: `Created ${nameToUse}` });
+  };
+
+  const handleOpenRenameDialog = (oldName: string) => {
+    setTargetRenameFile(oldName);
+    setRenameInput(oldName);
+    setRenameDialogOpen(true);
+  };
+
+  const handleConfirmRename = () => {
+    const trimmed = renameInput.trim();
+    if (!trimmed || trimmed === targetRenameFile) {
+      setRenameDialogOpen(false);
+      return;
+    }
+
+    if (files.some((f) => f.name.toLowerCase() === trimmed.toLowerCase() && f.name !== targetRenameFile)) {
+      toast({ title: "Name taken", description: `File "${trimmed}" already exists.`, variant: "destructive" });
+      return;
+    }
+
+    const inferredLang = trimmed.endsWith(".css") ? "css" : trimmed.endsWith(".js") ? "javascript" : trimmed.endsWith(".py") ? "python" : "html";
+    setFiles((prev) =>
+      prev.map((f) => (f.name === targetRenameFile ? { ...f, name: trimmed, language: inferredLang } : f))
+    );
+    if (activeFile === targetRenameFile) {
+      setActiveFile(trimmed);
+    }
+    setRenameDialogOpen(false);
+    toast({ title: "File Renamed", description: `Renamed to ${trimmed}` });
   };
 
   // ── Close file tab ──────────────────────────────────────────────────────────
@@ -534,9 +645,9 @@ export function ActivityCodeEditor({
     if (editorType === "monaco_html" || editorType === "monaco_css") {
       src = buildHtmlOutput(files);
     } else if (editorType === "monaco_js") {
-      src = buildJsOutput(currentFile.content);
+      src = buildJsOutput(currentFile.content, files);
     } else if (editorType === "monaco_python") {
-      src = buildPythonOutput(currentFile.content);
+      src = buildPythonOutput(currentFile.content, files);
     }
     setPreviewSrc(src);
     setPreviewOpen(true);
@@ -623,32 +734,128 @@ export function ActivityCodeEditor({
     window.addEventListener("mouseup", onUp);
   };
 
+  // ── Fail-Safe Project Submission Helper ────────────────────────────────────
+  const saveProjectSubmission = async (payload: {
+    title: string;
+    description: string;
+    code_content: string;
+    editor_type: string;
+  }) => {
+    const authId = user?.id || userProfile?.auth_user_id;
+    if (!authId) throw new Error("Please log in to submit your project.");
+
+    // Ensure user exists in 'users' table
+    let profileDbId = userProfile?.id;
+    let profileAuthId = userProfile?.auth_user_id || authId;
+
+    if (!profileDbId) {
+      const { data: uRow } = await supabase
+        .from("users")
+        .select("id, auth_user_id")
+        .or(`auth_user_id.eq.${authId},id.eq.${authId}`)
+        .maybeSingle();
+
+      if (uRow) {
+        profileDbId = uRow.id;
+        profileAuthId = uRow.auth_user_id || authId;
+      } else {
+        // Auto-create student record in 'users' table if missing
+        const meta = user?.user_metadata || {};
+        const fullName = meta.name || `${meta.first_name || ''} ${meta.last_name || ''}`.trim() || user?.email || "Student";
+
+        const { data: newUser } = await supabase
+          .from("users")
+          .insert({
+            auth_user_id: authId,
+            role: "student",
+            name: fullName,
+            email: user?.email || "",
+            approved: true,
+          })
+          .select("id, auth_user_id")
+          .maybeSingle();
+
+        if (newUser) {
+          profileDbId = newUser.id;
+          profileAuthId = newUser.auth_user_id || authId;
+        }
+      }
+    }
+
+    // Try candidate IDs in sequence: [profileAuthId, authId, profileDbId]
+    const candidates = Array.from(new Set([profileAuthId, authId, profileDbId].filter(Boolean))) as string[];
+
+    let lastError: any = null;
+    for (const sidCandidate of candidates) {
+      try {
+        const { data: existing } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("course_id", courseId)
+          .eq("lesson_id", lessonId)
+          .eq("student_id", sidCandidate)
+          .maybeSingle();
+
+        let err = null;
+        if (existing?.id) {
+          const { error: uErr } = await supabase
+            .from("projects")
+            .update({
+              ...payload,
+              student_id: sidCandidate,
+              review_status: "submitted",
+              submitted_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+          err = uErr;
+        } else {
+          const { error: iErr } = await supabase
+            .from("projects")
+            .insert({
+              course_id: courseId,
+              lesson_id: lessonId,
+              student_id: sidCandidate,
+              ...payload,
+              review_status: "submitted",
+              submitted_at: new Date().toISOString(),
+            });
+          err = iErr;
+        }
+
+        if (!err) {
+          // Submission succeeded!
+          return true;
+        }
+        lastError = err;
+        if (!err.message?.includes("projects_student_id_fkey")) {
+          throw err;
+        }
+      } catch (e: any) {
+        lastError = e;
+        if (!e.message?.includes("projects_student_id_fkey")) {
+          throw e;
+        }
+      }
+    }
+
+    if (lastError) throw lastError;
+  };
+
   // ── Submit ────────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!user) {
       toast({ title: "Login required", description: "Please log in to submit.", variant: "destructive" });
       return;
     }
-    const sid = user.id; // Use the auth UID directly — matches projects_student_id_fkey → auth.users(id)
     setSubmitting(true);
     try {
       const allCode = files.map((f) => `/* ===== ${f.name} ===== */\n${f.content}`).join("\n\n");
-      const { error } = await supabase.from("projects").upsert(
-        {
-          course_id: courseId,
-          lesson_id: lessonId,
-          student_id: sid,
-          title: exercise.title || "Activity Submission",
-          description: exercise.description || (isDebugMode ? "Debug challenge completed" : "Code activity completed"),
-          code_content: allCode,
-          editor_type: editorType,
-          review_status: "submitted",
-          submitted_at: new Date().toISOString(),
-        },
-        { onConflict: "course_id,lesson_id,student_id" }
-      );
-
-      if (error) throw error;
+      await saveProjectSubmission({
+        title: exercise.title || "Activity Submission",
+        description: exercise.description || (isDebugMode ? "Debug challenge completed" : "Code activity completed"),
+        code_content: allCode,
+        editor_type: editorType,
+      });
 
       soundEffects.playSuccess();
       createNotification({
@@ -660,10 +867,11 @@ export function ActivityCodeEditor({
       });
       toast({
         title: "🚀 Submitted to Tutor!",
-        description: "Your work has been submitted for review. Your tutor can see your code in the Submissions tab!",
+        description: "Your work has been submitted for review. Your tutor and admin can see your code now!",
       });
     } catch (err: any) {
-      toast({ title: "Submission failed", description: err.message, variant: "destructive" });
+      console.error("Submission error:", err);
+      toast({ title: "Submission failed", description: err.message || "Failed to submit project", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -757,23 +965,12 @@ export function ActivityCodeEditor({
                   if (!link) return toast({ title: "Please enter your project link", variant: "destructive" });
                   setSubmitting(true);
                   try {
-                    const sid = user?.id;
-                    if (!sid) throw new Error("Not logged in");
-                    const { error } = await supabase.from("projects").upsert(
-                      {
-                        course_id: courseId,
-                        lesson_id: lessonId,
-                        student_id: sid,
-                        title: exercise.title || "External Project",
-                        description: link,
-                        code_content: link,
-                        editor_type: editorType,
-                        review_status: "submitted",
-                        submitted_at: new Date().toISOString(),
-                      },
-                      { onConflict: "course_id,lesson_id,student_id" }
-                    );
-                    if (error) throw error;
+                    await saveProjectSubmission({
+                      title: exercise.title || "External Project",
+                      description: link,
+                      code_content: link,
+                      editor_type: editorType,
+                    });
                     soundEffects.playSuccess();
                     createNotification({
                       recipientRole: "tutor",
@@ -859,7 +1056,7 @@ export function ActivityCodeEditor({
           {files.map((f) => (
             <div
               key={f.name}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono cursor-pointer border transition-colors ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono cursor-pointer border transition-colors group ${
                 f.name === activeFile
                   ? "bg-slate-700 border-slate-600 text-blue-300"
                   : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
@@ -868,10 +1065,18 @@ export function ActivityCodeEditor({
             >
               <FileCode className="w-3 h-3 text-blue-400 shrink-0" />
               <span>{f.name}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleOpenRenameDialog(f.name); }}
+                className="text-slate-500 hover:text-blue-300 ml-0.5 opacity-60 hover:opacity-100"
+                title="Rename file"
+              >
+                <Edit2 className="w-2.5 h-2.5" />
+              </button>
               {files.length > 1 && (
                 <button
                   onClick={(e) => { e.stopPropagation(); closeFile(f.name); }}
                   className="text-slate-500 hover:text-red-400 ml-0.5"
+                  title="Close file"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -879,7 +1084,7 @@ export function ActivityCodeEditor({
             </div>
           ))}
           <button
-            onClick={addFile}
+            onClick={handleOpenNewFileDialog}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-slate-400 hover:text-white hover:bg-slate-800 border border-dashed border-slate-700 transition-colors"
             title="Add new file"
           >
@@ -1003,47 +1208,92 @@ export function ActivityCodeEditor({
               </Button>
             </div>
 
-            {/* Instruction content: paginated if multiple steps, or single view */}
+            {/* Instruction content: Step header & paginated step view */}
             <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-blue-300 text-sm">{exercise.title}</p>
-                {hasMultipleSteps && (
-                  <Badge variant="outline" className="text-[10px] text-blue-300 border-blue-500/30">
-                    Step {currentStep + 1} of {instructionSteps.length}
-                  </Badge>
-                )}
+              <div className="border-b border-slate-800/80 pb-3">
+                <h2 className="text-3xl font-extrabold text-white tracking-wide uppercase bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent drop-shadow-sm">
+                  STEP {currentStep + 1}
+                </h2>
+                <p className="text-xs text-blue-300 font-semibold mt-1">{exercise.title}</p>
               </div>
 
-              <div className="whitespace-pre-wrap text-slate-300 font-sans leading-relaxed bg-slate-950/40 p-3 rounded-lg border border-slate-800/80">
+              <div className="whitespace-pre-wrap text-slate-200 font-sans leading-relaxed bg-slate-950/60 p-3 rounded-lg border border-slate-800">
                 {hasMultipleSteps ? instructionSteps[currentStep] : instructionText}
               </div>
+
+              {/* Admin/Tutor Step Hints (Text, Image & Audio Guidance for kids) */}
+              {(() => {
+                const stepHints = (exercise.hints || []).filter(h => !h.step || h.step === (currentStep + 1));
+                if (stepHints.length === 0) return null;
+                return (
+                  <div className="mt-3 p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 space-y-3 text-slate-200 shadow-md">
+                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                      <Lightbulb className="w-4 h-4 text-amber-400 animate-pulse" />
+                      <span>Step Hint &amp; Guidance</span>
+                    </div>
+                    {stepHints.map((hint, hIdx) => (
+                      <div key={hIdx} className="space-y-2 text-xs">
+                        {hint.text && <p className="text-slate-200 leading-relaxed font-medium">{hint.text}</p>}
+                        
+                        {hint.audio_url && (
+                          <div className="bg-slate-950/80 p-2.5 rounded-lg border border-amber-500/30 space-y-1.5">
+                            <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
+                              <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                              Audio Guidance (Listen to Instructions):
+                            </span>
+                            <audio controls src={hint.audio_url} className="w-full h-8" />
+                          </div>
+                        )}
+
+                        {hint.image_url && (
+                          <div className="space-y-1">
+                            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3 text-blue-400" />
+                              Visual Snapshot / Code Diagram:
+                            </span>
+                            <img
+                              src={hint.image_url}
+                              alt={`Hint snapshot for Step ${currentStep + 1}`}
+                              className="rounded-lg border border-amber-500/30 max-h-56 object-contain w-full bg-black/40"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Step navigation buttons when there are multiple steps */}
+            {/* Step navigation: Next after Step 1, Previous & Next on Step 2+ */}
             {hasMultipleSteps && (
-              <div className="p-2.5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={currentStep === 0}
-                  onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
-                  className="h-7 text-xs px-2.5 text-slate-300 border-slate-700 bg-slate-900 hover:bg-slate-800 gap-1"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>Previous</span>
-                </Button>
-                <span className="text-[11px] text-slate-400 font-mono">
+              <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between gap-2">
+                {currentStep > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
+                    className="h-8 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </Button>
+                ) : <div />}
+
+                <span className="text-xs text-slate-400 font-mono">
                   {currentStep + 1} / {instructionSteps.length}
                 </span>
-                <Button
-                  size="sm"
-                  disabled={currentStep >= instructionSteps.length - 1}
-                  onClick={() => setCurrentStep((s) => Math.min(instructionSteps.length - 1, s + 1))}
-                  className="h-7 text-xs px-2.5 bg-blue-600 hover:bg-blue-700 text-white gap-1"
-                >
-                  <span>Next</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
+
+                {currentStep < instructionSteps.length - 1 ? (
+                  <Button
+                    size="sm"
+                    onClick={() => setCurrentStep((s) => Math.min(instructionSteps.length - 1, s + 1))}
+                    className="h-8 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                ) : <div />}
               </div>
             )}
           </div>
@@ -1160,6 +1410,92 @@ export function ActivityCodeEditor({
           </div>
         )}
       </div>
+
+      {/* ── Create New File Modal ────────────────────────────────────────── */}
+      <Dialog open={newFileDialogOpen} onOpenChange={setNewFileDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <FileCode className="w-5 h-5 text-blue-500" />
+              Create New File
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Enter Custom File Name *</Label>
+              <Input
+                value={newFileNameInput}
+                onChange={(e) => setNewFileNameInput(e.target.value)}
+                placeholder="e.g. contact.html, style.css, utils.py, game.py, app.js"
+                className="text-sm font-mono"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleConfirmNewFile();
+                }}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">Or click a suggested filename:</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {["contact.html", "styles.css", "app.css", "script.js", "app.js", "utils.py", "game.py", "main.py"].map((preset) => (
+                  <Badge
+                    key={preset}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground font-mono text-xs py-1 px-2.5 transition-colors"
+                    onClick={() => handleConfirmNewFile(preset)}
+                  >
+                    + {preset}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setNewFileDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => handleConfirmNewFile()} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+              Create File
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Rename File Tab Modal ────────────────────────────────────────── */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Edit2 className="w-5 h-5 text-blue-500" />
+              Rename File Tab
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Rename "{targetRenameFile}" to:</Label>
+              <Input
+                value={renameInput}
+                onChange={(e) => setRenameInput(e.target.value)}
+                placeholder="e.g. contact.html, styles.css, app.js"
+                className="text-sm font-mono"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleConfirmRename();
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmRename} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+              Save Name
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

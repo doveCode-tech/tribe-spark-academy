@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { MessageCircle, X, ChevronDown, HelpCircle, HandHeart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LiveChat } from "./LiveChat";
@@ -7,10 +8,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { soundEffects } from "@/utils/audio";
 
 export function LiveChatWidget() {
+  const location = useLocation();
   const { user, userProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  const isLiveChatRoute = location.pathname === "/live-chat" || location.pathname.startsWith("/chat");
   const isStudent = (userProfile?.role || "").toLowerCase() === "student";
 
   // Listen for real-time incoming messages to notify user when widget is minimized
@@ -51,7 +54,7 @@ export function LiveChatWidget() {
     setIsOpen(!isOpen);
   };
 
-  if (!user) return null;
+  if (!user || isLiveChatRoute) return null;
 
   // ── Button styles ──────────────────────────────────────────────────────────
   // Student  → green "Need Help?" with ? icon
@@ -141,14 +144,16 @@ export function LiveChatWidget() {
       )}
 
       {/* Floating Trigger Button */}
-      <div className="relative">
-        {unreadCount > 0 && !isOpen && (
-          <span className="absolute -top-1.5 -left-1.5 z-10 bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center shadow animate-bounce">
-            {unreadCount}
-          </span>
-        )}
-        {triggerBtn}
-      </div>
+      {!isOpen && (
+        <div className="relative">
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -left-1.5 z-10 bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center shadow animate-bounce">
+              {unreadCount}
+            </span>
+          )}
+          {triggerBtn}
+        </div>
+      )}
     </div>
   );
 }
