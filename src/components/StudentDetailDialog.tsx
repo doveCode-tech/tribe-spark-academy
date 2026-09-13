@@ -102,6 +102,7 @@ export function StudentDetailDialog({
   const [grades, setGrades] = useState<ProjectGrade[]>([]);
   const [reports, setReports] = useState<StudentReport[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [firstLogAt, setFirstLogAt] = useState<string | null>(null);
   const [reportFilter, setReportFilter] = useState<"all" | "today" | "outline" | "complete">("all");
 
   useEffect(() => {
@@ -232,6 +233,18 @@ export function StudentDetailDialog({
       if (logsData) {
         setAuditLogs(logsData);
       }
+
+      // The bounded query above only covers recent history, so the very first
+      // event is fetched separately
+      const { data: firstLog } = await supabase
+        .from("audit_logs")
+        .select("created_at")
+        .filter("performed_by", "in", idFilter)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      setFirstLogAt(firstLog?.created_at ?? null);
     } catch (err) {
       console.error("Error loading student data:", err);
     } finally {
@@ -239,11 +252,20 @@ export function StudentDetailDialog({
     }
   };
 
-  // Filtered reports
-  const todayStr = new Date().toISOString().split("T")[0];
+  // Filtered reports — "today" follows the viewer's local calendar day
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTomorrow = new Date(startOfToday);
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  const isToday = (value?: string | null) => {
+    if (!value) return false;
+    const at = new Date(value);
+    return at >= startOfToday && at < startOfTomorrow;
+  };
+
   const filteredReports = reports.filter((r) => {
     if (reportFilter === "today") {
-      return r.created_at && r.created_at.startsWith(todayStr);
+      return isToday(r.created_at);
     }
     if (reportFilter === "outline") {
       return r.title?.toLowerCase().includes("outline") || r.content?.toLowerCase().includes("outline");
@@ -257,16 +279,16 @@ export function StudentDetailDialog({
   // Activity derivations
   const loginLogs = auditLogs.filter((l) => l.action_type === "login");
   const logoutLogs = auditLogs.filter((l) => l.action_type === "logout");
-  const oldestLog = auditLogs.length > 0 ? auditLogs[auditLogs.length - 1] : null;
 
+  const firstVisitCandidates = [firstLogAt, profile?.created_at].filter(Boolean) as string[];
   const firstVisit =
-    loginLogs.length > 0
-      ? loginLogs[loginLogs.length - 1].created_at
-      : oldestLog?.created_at || profile?.created_at || null;
+    firstVisitCandidates.length > 0
+      ? firstVisitCandidates.reduce((earliest, candidate) => (candidate < earliest ? candidate : earliest))
+      : null;
 
   const lastVisit = profile?.last_access || profile?.last_login || auditLogs[0]?.created_at || null;
   const lastLogin = profile?.last_login || loginLogs[0]?.created_at || null;
-  const todaysLogs = auditLogs.filter((l) => l.created_at?.startsWith(todayStr));
+  const todaysLogs = auditLogs.filter((l) => isToday(l.created_at));
 
   // Most recent event that happened before the student last signed out
   const lastLogout = logoutLogs[0] || null;

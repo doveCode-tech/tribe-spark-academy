@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { LMSLayout } from "@/components/LMSLayout";
 import { Button } from "@/components/ui/button";
@@ -129,6 +129,19 @@ export default function LessonGradingPage() {
   // Inline grading state map
   const [gradingValues, setGradingValues] = useState<Record<string, { grade: string; feedback: string }>>({});
   const [savingGradeId, setSavingGradeId] = useState<string | null>(null);
+  // Submissions with unsaved edits, preserved across realtime reloads
+  const dirtyDrafts = useRef<Set<string>>(new Set());
+
+  const setDraft = (
+    submissionId: string,
+    patch: Partial<{ grade: string; feedback: string }>
+  ) => {
+    dirtyDrafts.current.add(submissionId);
+    setGradingValues((prev) => ({
+      ...prev,
+      [submissionId]: { grade: "", feedback: "", ...prev[submissionId], ...patch },
+    }));
+  };
 
   // View Submission Modal state
   const [viewSubmission, setViewSubmission] = useState<SubmissionItem | null>(null);
@@ -308,7 +321,13 @@ export default function LessonGradingPage() {
       });
 
       setSubmissions(enrichedSubmissions);
-      setGradingValues(initialGradingMap);
+      setGradingValues((prev) => {
+        const merged = { ...initialGradingMap };
+        dirtyDrafts.current.forEach((id) => {
+          if (prev[id]) merged[id] = prev[id];
+        });
+        return merged;
+      });
     } catch (err: any) {
       console.error("Error loading submissions page data:", err);
       toast({
@@ -444,6 +463,7 @@ export default function LessonGradingPage() {
 
       if (error) throw error;
 
+      dirtyDrafts.current.delete(submissionId);
       soundEffects.playSuccess();
       toast({ title: "Grade Saved!", description: `Assigned ${numGrade}% to student.` });
 
@@ -500,6 +520,7 @@ export default function LessonGradingPage() {
 
       toast({ title: "Grade removed", description: "Submission is back in the needs-grading queue." });
 
+      dirtyDrafts.current.delete(submissionId);
       setGradingValues((prev) => ({ ...prev, [submissionId]: { grade: "", feedback: "" } }));
       setSubmissions((prev) =>
         prev.map((s) =>
@@ -1068,15 +1089,7 @@ export default function LessonGradingPage() {
                                       min="0"
                                       max="100"
                                       value={vals.grade}
-                                      onChange={(e) =>
-                                        setGradingValues((prev) => ({
-                                          ...prev,
-                                          [sub.id]: {
-                                            ...vals,
-                                            grade: e.target.value,
-                                          },
-                                        }))
-                                      }
+                                      onChange={(e) => setDraft(sub.id, { grade: e.target.value })}
                                       className="w-14 h-8 text-center text-xs font-semibold bg-background p-1 border-purple-200"
                                       placeholder="—"
                                     />
@@ -1189,15 +1202,7 @@ export default function LessonGradingPage() {
                                 {row.isSubmitted && sub ? (
                                   <Input
                                     value={vals.feedback}
-                                    onChange={(e) =>
-                                      setGradingValues((prev) => ({
-                                        ...prev,
-                                        [sub.id]: {
-                                          ...vals,
-                                          feedback: e.target.value,
-                                        },
-                                      }))
-                                    }
+                                    onChange={(e) => setDraft(sub.id, { feedback: e.target.value })}
                                     onBlur={() => {
                                       if (sub.grade !== null && vals.feedback !== sub.feedback) {
                                         handleSaveGrade(sub.id);
@@ -1868,13 +1873,7 @@ export default function LessonGradingPage() {
                       value={viewSubmission ? gradingValues[viewSubmission.id]?.grade || "" : ""}
                       onChange={(e) => {
                         if (!viewSubmission) return;
-                        setGradingValues((prev) => ({
-                          ...prev,
-                          [viewSubmission.id]: {
-                            ...prev[viewSubmission.id],
-                            grade: e.target.value,
-                          },
-                        }));
+                        setDraft(viewSubmission.id, { grade: e.target.value });
                       }}
                       className="h-9 text-sm font-bold bg-background border-purple-200"
                       placeholder="e.g. 95"
@@ -1888,13 +1887,7 @@ export default function LessonGradingPage() {
                       value={viewSubmission ? gradingValues[viewSubmission.id]?.feedback || "" : ""}
                       onChange={(e) => {
                         if (!viewSubmission) return;
-                        setGradingValues((prev) => ({
-                          ...prev,
-                          [viewSubmission.id]: {
-                            ...prev[viewSubmission.id],
-                            feedback: e.target.value,
-                          },
-                        }));
+                        setDraft(viewSubmission.id, { feedback: e.target.value });
                       }}
                       placeholder="Great work on this activity! Keep it up..."
                       className="h-9 text-xs bg-background border-purple-200"

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { logUserActivity } from '@/utils/activityLog';
+import { logUserActivity, logLoginOnce, clearLoginMarker } from '@/utils/activityLog';
 
 interface AuthContextType {
   user: User | null;
@@ -105,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             // Show welcome message only on login event
             if (event === 'SIGNED_IN') {
-              logUserActivity('login', { email: session.user.email });
+              logLoginOnce(session.user.id, { email: session.user.email });
 
               const displayName = profile?.first_name 
                 ? `${profile.first_name}${profile.last_name ? ` ${profile.last_name}` : ''}`
@@ -225,7 +225,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      const signedOutUserId = user?.id;
       await logUserActivity('logout');
+      clearLoginMarker(signedOutUserId);
       await supabase.auth.signOut();
       toast({
         title: "Logged Out",
