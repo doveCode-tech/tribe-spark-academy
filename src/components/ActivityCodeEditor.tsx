@@ -29,6 +29,9 @@ import {
   Image as ImageIcon,
   Edit2,
   Volume2,
+  Video,
+  Eye,
+  HelpCircle,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -54,6 +57,14 @@ export interface ExerciseHint {
   text?: string;
   image_url?: string;
   audio_url?: string;
+  video_url?: string;
+}
+
+export interface StepOutcome {
+  step: number;
+  image_url?: string;
+  video_url?: string;
+  description?: string;
 }
 
 export interface Exercise {
@@ -68,6 +79,11 @@ export interface Exercise {
   solution_code?: string;
   is_assignment?: boolean;
   hints?: ExerciseHint[];
+  sample_project_title?: string;
+  sample_project_description?: string;
+  sample_project_image_url?: string;
+  sample_project_video_url?: string;
+  step_outcomes?: StepOutcome[];
 }
 
 interface ActivityCodeEditorProps {
@@ -428,6 +444,41 @@ function buildPythonOutput(currentCode: string, allFiles: FileTab[]): string {
 </body></html>`;
 }
 
+// ── Video helper for short video clips & hints ─────────────────────────────
+function renderVideoClipPlayer(url: string, title: string = "Hint Video Clip") {
+  if (!url) return null;
+  const isYoutube = url.includes("youtu.be") || url.includes("youtube.com");
+  if (isYoutube) {
+    let embedUrl = url;
+    if (url.includes("youtu.be/")) {
+      const id = url.split("youtu.be/")[1]?.split("?")[0];
+      embedUrl = `https://www.youtube.com/embed/${id}`;
+    } else if (url.includes("watch?v=")) {
+      const id = url.split("watch?v=")[1]?.split("&")[0];
+      embedUrl = `https://www.youtube.com/embed/${id}`;
+    } else if (url.includes("shorts/")) {
+      const id = url.split("shorts/")[1]?.split("?")[0];
+      embedUrl = `https://www.youtube.com/embed/${id}`;
+    }
+    return (
+      <iframe
+        src={embedUrl}
+        title={title}
+        className="w-full h-44 rounded-lg border border-slate-700 bg-black shadow-sm"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  }
+  return (
+    <video
+      controls
+      src={url}
+      className="w-full max-h-48 rounded-lg border border-slate-700 bg-black shadow-sm"
+    />
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export function ActivityCodeEditor({
   exercise,
@@ -497,6 +548,22 @@ export function ActivityCodeEditor({
   })();
   const [currentStep, setCurrentStep] = useState(0);
   const hasMultipleSteps = instructionSteps.length > 1;
+
+  // ── Hint toggle & Sample Project panel state (Images 3 & 4) ────────────────
+  const [openHints, setOpenHints] = useState<Record<number, boolean>>({});
+  const toggleHint = (stepNumber: number) => {
+    setOpenHints((prev) => ({ ...prev, [stepNumber]: !prev[stepNumber] }));
+  };
+
+  const hasSampleProject = Boolean(
+    exercise.sample_project_image_url ||
+    exercise.sample_project_video_url ||
+    exercise.sample_project_description
+  );
+  const [panelView, setPanelView] = useState<"steps" | "sample">(
+    hasSampleProject ? "sample" : "steps"
+  );
+  const [modalImage, setModalImage] = useState<string | null>(null);
 
   // Sync storage when files change
   useEffect(() => {
@@ -1271,6 +1338,7 @@ export function ActivityCodeEditor({
         {/* Step-by-Step Guidance Side Panel */}
         {instructionsOpen && (
           <div className="w-72 md:w-80 border-r border-slate-800 bg-slate-900/95 flex flex-col shrink-0 text-slate-200">
+            {/* Panel Top Header */}
             <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Layout className="w-3.5 h-3.5 text-blue-400" />
@@ -1286,92 +1354,267 @@ export function ActivityCodeEditor({
               </Button>
             </div>
 
-            {/* Instruction content: Step header & paginated step view */}
-            <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3">
-              <div className="border-b border-slate-800/80 pb-3">
-                <h2 className="text-3xl font-extrabold text-white tracking-wide uppercase bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent drop-shadow-sm">
-                  STEP {currentStep + 1}
-                </h2>
-                <p className="text-xs text-blue-300 font-semibold mt-1">{exercise.title}</p>
+            {/* Sub-tabs if Sample Project exists (Image 3) */}
+            {hasSampleProject && (
+              <div className="flex border-b border-slate-800 bg-slate-950/80">
+                <button
+                  type="button"
+                  onClick={() => setPanelView("steps")}
+                  className={`flex-1 py-2 text-[11px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+                    panelView === "steps"
+                      ? "border-blue-500 text-blue-300 bg-slate-900/60"
+                      : "border-transparent text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Layout className="w-3 h-3" />
+                  <span>Steps ({currentStep + 1}/{instructionSteps.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelView("sample")}
+                  className={`flex-1 py-2 text-[11px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+                    panelView === "sample"
+                      ? "border-blue-500 text-blue-300 bg-slate-900/60"
+                      : "border-transparent text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Eye className="w-3 h-3 text-blue-400" />
+                  <span>Sample Project</span>
+                </button>
               </div>
+            )}
 
-              <div className="whitespace-pre-wrap text-slate-200 font-sans leading-relaxed bg-slate-950/60 p-3 rounded-lg border border-slate-800">
-                {hasMultipleSteps ? instructionSteps[currentStep] : instructionText}
-              </div>
-
-              {/* Admin/Tutor Step Hints (Text, Image & Audio Guidance for kids) */}
-              {(() => {
-                const stepHints = (exercise.hints || []).filter(h => !h.step || h.step === (currentStep + 1));
-                if (stepHints.length === 0) return null;
-                return (
-                  <div className="mt-3 p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 space-y-3 text-slate-200 shadow-md">
-                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
-                      <Lightbulb className="w-4 h-4 text-amber-400 animate-pulse" />
-                      <span>Step Hint &amp; Guidance</span>
-                    </div>
-                    {stepHints.map((hint, hIdx) => (
-                      <div key={hIdx} className="space-y-2 text-xs">
-                        {hint.text && <p className="text-slate-200 leading-relaxed font-medium">{hint.text}</p>}
-                        
-                        {hint.audio_url && (
-                          <div className="bg-slate-950/80 p-2.5 rounded-lg border border-amber-500/30 space-y-1.5">
-                            <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
-                              <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                              Audio Guidance (Listen to Instructions):
-                            </span>
-                            <audio controls src={hint.audio_url} className="w-full h-8" />
-                          </div>
-                        )}
-
-                        {hint.image_url && (
-                          <div className="space-y-1">
-                            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-                              <ImageIcon className="w-3 h-3 text-blue-400" />
-                              Visual Snapshot / Code Diagram:
-                            </span>
-                            <img
-                              src={hint.image_url}
-                              alt={`Hint snapshot for Step ${currentStep + 1}`}
-                              className="rounded-lg border border-amber-500/30 max-h-56 object-contain w-full bg-black/40"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+            {/* Panel View: Sample Project Mode (Image 3) */}
+            {panelView === "sample" && hasSampleProject ? (
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3.5">
+                  <div className="border-b border-slate-800/80 pb-2.5">
+                    <h2 className="text-xl font-extrabold text-white tracking-wide">
+                      {exercise.sample_project_title || "Sample Project"}
+                    </h2>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      {exercise.sample_project_description || "Follow the instructions in this area to build your own project."}
+                    </p>
                   </div>
-                );
-              })()}
-            </div>
 
-            {/* Step navigation: Next after Step 1, Previous & Next on Step 2+ */}
-            {hasMultipleSteps && (
-              <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between gap-2">
-                {currentStep > 0 ? (
+                  {/* Video demo if provided */}
+                  {exercise.sample_project_video_url && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-blue-300 flex items-center gap-1">
+                        <Video className="w-3 h-3 text-blue-400" />
+                        Project Demonstration Video:
+                      </span>
+                      {renderVideoClipPlayer(exercise.sample_project_video_url, "Sample Project Demo")}
+                    </div>
+                  )}
+
+                  {/* Sample project image preview */}
+                  {exercise.sample_project_image_url ? (
+                    <div
+                      className="rounded-xl overflow-hidden border border-slate-700 bg-black/60 cursor-pointer group relative shadow-md"
+                      onClick={() => setModalImage(exercise.sample_project_image_url || null)}
+                    >
+                      <img
+                        src={exercise.sample_project_image_url}
+                        alt="Sample Project Outcome Preview"
+                        className="w-full object-contain max-h-72 transition-transform group-hover:scale-[1.02]"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold gap-1 transition-opacity">
+                        <Eye className="w-4 h-4" /> Click to enlarge
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <p className="text-[11px] text-slate-400 italic">
+                    Use this sample as a guide for what your project should do and look like.
+                  </p>
+                </div>
+
+                {/* Footer for Sample Project: Next to Step 1 */}
+                <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-medium">Ready to start?</span>
                   <Button
                     size="sm"
-                    variant="default"
-                    onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
-                    className="h-8 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>Previous</span>
-                  </Button>
-                ) : <div />}
-
-                <span className="text-xs text-slate-400 font-mono">
-                  {currentStep + 1} / {instructionSteps.length}
-                </span>
-
-                {currentStep < instructionSteps.length - 1 ? (
-                  <Button
-                    size="sm"
-                    onClick={() => setCurrentStep((s) => Math.min(instructionSteps.length - 1, s + 1))}
-                    className="h-8 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow"
+                    onClick={() => {
+                      setPanelView("steps");
+                      setCurrentStep(0);
+                    }}
+                    className="h-8 text-xs px-3.5 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow font-semibold"
                   >
                     <span>Next</span>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
-                ) : <div />}
+                </div>
+              </div>
+            ) : (
+              /* Panel View: Step-by-Step Mode (Image 4 & Step Outcomes) */
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                <div className="p-4 flex-1 overflow-y-auto text-xs leading-relaxed space-y-3">
+                  <div className="border-b border-slate-800/80 pb-3">
+                    <h2 className="text-3xl font-extrabold text-white tracking-wide uppercase bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent drop-shadow-sm">
+                      STEP {currentStep + 1}
+                    </h2>
+                    <p className="text-xs text-blue-300 font-semibold mt-1">{exercise.title}</p>
+                  </div>
+
+                  {/* Main Step Text Instructions */}
+                  <div className="whitespace-pre-wrap text-slate-200 font-sans leading-relaxed bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                    {hasMultipleSteps ? instructionSteps[currentStep] : instructionText}
+                  </div>
+
+                  {/* Per-Step Expected Outcome Preview (Image 3) */}
+                  {(() => {
+                    const stepOutcome = (exercise.step_outcomes || []).find(
+                      (so) => so.step === currentStep + 1
+                    );
+                    if (
+                      !stepOutcome ||
+                      (!stepOutcome.image_url && !stepOutcome.video_url && !stepOutcome.description)
+                    )
+                      return null;
+                    return (
+                      <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 space-y-2 text-xs text-slate-200 shadow-sm">
+                        <span className="font-bold text-blue-300 flex items-center gap-1.5 text-xs">
+                          <Eye className="w-3.5 h-3.5 text-blue-400" />
+                          Expected Outcome for Step {currentStep + 1}
+                        </span>
+                        {stepOutcome.description && (
+                          <p className="text-slate-300 leading-relaxed text-[11px]">
+                            {stepOutcome.description}
+                          </p>
+                        )}
+                        {stepOutcome.video_url &&
+                          renderVideoClipPlayer(stepOutcome.video_url, `Step ${currentStep + 1} Outcome`)}
+                        {stepOutcome.image_url && (
+                          <img
+                            src={stepOutcome.image_url}
+                            alt={`Step ${currentStep + 1} Target`}
+                            onClick={() => setModalImage(stepOutcome.image_url || null)}
+                            className="rounded-lg border border-blue-500/30 w-full object-contain max-h-52 bg-black/40 cursor-pointer hover:opacity-95 transition-opacity"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Collapsible "Need a hint? +" Accordion System (Image 4) */}
+                  {(() => {
+                    const stepHints = (exercise.hints || []).filter(
+                      (h) => !h.step || h.step === currentStep + 1
+                    );
+                    if (stepHints.length === 0) return null;
+                    const isOpen = !!openHints[currentStep + 1];
+
+                    return (
+                      <div className="space-y-2 pt-1">
+                        {/* Accordion trigger matching Image 4 */}
+                        <button
+                          type="button"
+                          onClick={() => toggleHint(currentStep + 1)}
+                          className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold transition-all shadow-xs"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Need a hint?</span>
+                          </span>
+                          <span className="text-base font-bold text-amber-400 leading-none">
+                            {isOpen ? "−" : "+"}
+                          </span>
+                        </button>
+
+                        {/* Accordion expanded content */}
+                        {isOpen && (
+                          <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 space-y-3 text-slate-200 animate-in fade-in slide-in-from-top-1 duration-200 shadow-md">
+                            {stepHints.map((hint, hIdx) => (
+                              <div key={hIdx} className="space-y-2 text-xs">
+                                {/* Text clue */}
+                                {hint.text && (
+                                  <p className="text-slate-200 leading-relaxed font-medium bg-black/30 p-2.5 rounded-lg border border-amber-500/20">
+                                    {hint.text}
+                                  </p>
+                                )}
+
+                                {/* Short video clip */}
+                                {hint.video_url && (
+                                  <div className="space-y-1">
+                                    <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
+                                      <Video className="w-3.5 h-3.5 text-amber-400" />
+                                      Video Hint Clip:
+                                    </span>
+                                    {renderVideoClipPlayer(hint.video_url, `Hint Step ${currentStep + 1}`)}
+                                  </div>
+                                )}
+
+                                {/* Image reference */}
+                                {hint.image_url && (
+                                  <div className="space-y-1">
+                                    <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
+                                      <ImageIcon className="w-3 h-3 text-blue-400" />
+                                      Visual Reference / Diagram:
+                                    </span>
+                                    <img
+                                      src={hint.image_url}
+                                      alt={`Hint snapshot for Step ${currentStep + 1}`}
+                                      onClick={() => setModalImage(hint.image_url || null)}
+                                      className="rounded-lg border border-amber-500/30 max-h-56 object-contain w-full bg-black/40 cursor-pointer hover:opacity-95 transition-opacity"
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Audio voice guidance */}
+                                {hint.audio_url && (
+                                  <div className="bg-slate-950/80 p-2.5 rounded-lg border border-amber-500/30 space-y-1.5">
+                                    <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
+                                      <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                                      Audio Guidance:
+                                    </span>
+                                    <audio controls src={hint.audio_url} className="w-full h-8" />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Step navigation: Next after Step 1, Previous & Next on Step 2+ */}
+                {hasMultipleSteps && (
+                  <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between gap-2">
+                    {currentStep > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
+                        className="h-8 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>Previous</span>
+                      </Button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <span className="text-xs text-slate-400 font-mono">
+                      {currentStep + 1} / {instructionSteps.length}
+                    </span>
+
+                    {currentStep < instructionSteps.length - 1 ? (
+                      <Button
+                        size="sm"
+                        onClick={() => setCurrentStep((s) => Math.min(instructionSteps.length - 1, s + 1))}
+                        className="h-8 text-xs px-3 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow"
+                      >
+                        <span>Next</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    ) : (
+                      <div />
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1572,6 +1815,27 @@ export function ActivityCodeEditor({
               Save Name
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Image Lightbox Modal for Sample Outcomes & Hints ────────────── */}
+      <Dialog open={!!modalImage} onOpenChange={(open) => !open && setModalImage(null)}>
+        <DialogContent className="max-w-3xl p-2 bg-slate-950 border-slate-800 text-white overflow-hidden">
+          <div className="flex items-center justify-between p-2 border-b border-slate-800 text-xs text-slate-400">
+            <span className="font-semibold flex items-center gap-1.5 text-slate-200">
+              <Eye className="w-4 h-4 text-blue-400" />
+              Outcome / Hint Preview
+            </span>
+          </div>
+          {modalImage && (
+            <div className="p-2 flex items-center justify-center bg-black/70 max-h-[80vh] overflow-auto">
+              <img
+                src={modalImage}
+                alt="Enlarged Reference"
+                className="max-h-[75vh] w-auto max-w-full object-contain rounded"
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

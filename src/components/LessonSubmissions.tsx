@@ -98,9 +98,9 @@ export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps
         (data || []).map(async (sub) => {
           const { data: student } = await supabase
             .from("users")
-            .select("first_name, last_name, email, avatar_url")
-            .eq("auth_user_id", sub.student_id)
-            .single();
+            .select("name, first_name, last_name, email, phone, parent_phone, avatar_url")
+            .or(`id.eq.${sub.student_id},auth_user_id.eq.${sub.student_id}`)
+            .maybeSingle();
           return { ...sub, student };
         })
       );

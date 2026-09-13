@@ -145,12 +145,20 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
       if (studentIds.length > 0) {
         const { data: uData } = await supabase
           .from('users')
-          .select('id, auth_user_id, name, email, parent_phone, avatar_url')
+          .select('id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url')
           .or(`id.in.(${studentIds.join(',')}),auth_user_id.in.(${studentIds.join(',')})`);
 
         (uData || []).forEach(u => {
-          if (u.id) usersMap[u.id] = u;
-          if (u.auth_user_id) usersMap[u.auth_user_id] = u;
+          const fn = u.first_name?.trim() || "";
+          const ln = u.last_name?.trim() || "";
+          const fullName = [fn, ln].filter(Boolean).join(" ");
+          const parsed = {
+            ...u,
+            name: fullName || (u.name && u.name.trim()) || "",
+            phone: u.phone || u.parent_phone || "",
+          };
+          if (u.id) usersMap[u.id] = parsed;
+          if (u.auth_user_id) usersMap[u.auth_user_id] = parsed;
         });
       }
 
@@ -162,7 +170,7 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
         initialFeedback[p.id] = p.feedback || '';
         return {
           ...p,
-          student: usersMap[p.student_id] || { name: 'Student', email: '' }
+          student: usersMap[p.student_id] || { name: '', email: '', phone: '' }
         };
       });
 

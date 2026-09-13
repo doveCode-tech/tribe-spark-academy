@@ -23,6 +23,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  ChevronLeft,
+  ChevronRight,
   ArrowLeft,
   Download,
   ExternalLink,
@@ -71,6 +73,8 @@ interface SubmissionItem {
     id: string;
     auth_user_id: string | null;
     name: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
     email: string | null;
     phone?: string | null;
     avatar_url?: string | null;
@@ -81,6 +85,8 @@ interface EnrolledStudent {
   id: string;
   auth_user_id: string | null;
   name: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string | null;
   phone?: string | null;
   avatar_url?: string | null;
@@ -102,6 +108,8 @@ export default function LessonGradingPage() {
 
   const [course, setCourse] = useState<any>(null);
   const [lesson, setLesson] = useState<any>(null);
+  const [allLessons, setAllLessons] = useState<{ id: string; title: string; order_index: number }[]>([]);
+  const [downloadInFolders, setDownloadInFolders] = useState(false);
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +131,17 @@ export default function LessonGradingPage() {
   // View Submission Modal state
   const [viewSubmission, setViewSubmission] = useState<SubmissionItem | null>(null);
   const [codeTab, setCodeTab] = useState<"code" | "preview">("code");
+
+  // Current lesson navigation calculations (Image 1)
+  const currentLessonIndex = useMemo(() => {
+    return allLessons.findIndex((l) => l.id === lessonId);
+  }, [allLessons, lessonId]);
+
+  const prevLesson = currentLessonIndex > 0 ? allLessons[currentLessonIndex - 1] : null;
+  const nextLesson =
+    currentLessonIndex >= 0 && currentLessonIndex < allLessons.length - 1
+      ? allLessons[currentLessonIndex + 1]
+      : null;
 
   // ── Settings Tab State (Image 2) ───────────────────────────────────────────
   const [settingTitle, setSettingTitle] = useState("");
@@ -174,6 +193,14 @@ export default function LessonGradingPage() {
         .maybeSingle();
       setLesson(lData);
 
+      // 3. Fetch all lessons for course (for bottom navigation bar)
+      const { data: allCourseLessons } = await supabase
+        .from("lessons")
+        .select("id, title, order_index")
+        .eq("course_id", courseId!)
+        .order("order_index", { ascending: true });
+      setAllLessons(allCourseLessons || []);
+
       // Initialize Settings from Lesson Data
       if (lData) {
         setSettingTitle(lData.title || "");
@@ -198,13 +225,13 @@ export default function LessonGradingPage() {
         if (ex.rubric && Array.isArray(ex.rubric)) setRubricCriteria(ex.rubric);
       }
 
-      // 3. Fetch Enrolled Students for this course
+      // 4. Fetch Enrolled Students for this course
       const { data: enrollments } = await supabase
         .from("enrollments")
         .select("student_id")
         .eq("course_id", courseId!);
 
-      // 4. Fetch Submissions for this lesson
+      // 5. Fetch Submissions for this lesson
       const { data: pData, error: pErr } = await supabase
         .from("projects")
         .select("id, course_id, lesson_id, student_id, title, description, link, file_path, code_content, editor_type, grade, feedback, review_status, submitted_at")
@@ -223,6 +250,26 @@ export default function LessonGradingPage() {
       });
       const allUniqueIds = Array.from(allStudentIdSet);
 
+      // Helper to build EnrolledStudent from user row
+      const parseUserRecord = (u: any): EnrolledStudent => {
+        const fn = u.first_name?.trim() || "";
+        const ln = u.last_name?.trim() || "";
+        const combined = [fn, ln].filter(Boolean).join(" ");
+        const studentName = combined || (u.name && u.name.trim()) || "";
+        const studentPhone = u.phone || u.parent_phone || null;
+
+        return {
+          id: u.id,
+          auth_user_id: u.auth_user_id,
+          name: studentName,
+          first_name: u.first_name || null,
+          last_name: u.last_name || null,
+          email: u.email || "",
+          phone: studentPhone,
+          avatar_url: u.avatar_url || null,
+        };
+      };
+
       // Query users table for all student records
       const usersMap: Record<string, EnrolledStudent> = {};
 
@@ -230,25 +277,18 @@ export default function LessonGradingPage() {
         // Query by id
         const { data: byId } = await supabase
           .from("users")
-          .select("id, auth_user_id, name, email, parent_phone, avatar_url")
+          .select("id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url")
           .in("id", allUniqueIds);
 
         // Query by auth_user_id
         const { data: byAuth } = await supabase
           .from("users")
-          .select("id, auth_user_id, name, email, parent_phone, avatar_url")
+          .select("id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url")
           .in("auth_user_id", allUniqueIds);
 
         const foundUsers = [...(byId || []), ...(byAuth || [])];
         foundUsers.forEach((u) => {
-          const item: EnrolledStudent = {
-            id: u.id,
-            auth_user_id: u.auth_user_id,
-            name: u.name || (u.email ? u.email.split("@")[0] : "Student"),
-            email: u.email || "",
-            phone: u.parent_phone || null,
-            avatar_url: u.avatar_url || null,
-          };
+          const item = parseUserRecord(u);
           if (u.id) usersMap[u.id] = item;
           if (u.auth_user_id) usersMap[u.auth_user_id] = item;
         });
@@ -259,18 +299,11 @@ export default function LessonGradingPage() {
       if (stillMissing.length > 0) {
         const { data: fallbackUsers } = await supabase
           .from("users")
-          .select("id, auth_user_id, name, email, parent_phone, avatar_url")
-          .limit(200);
+          .select("id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url")
+          .limit(300);
 
         (fallbackUsers || []).forEach((u) => {
-          const item: EnrolledStudent = {
-            id: u.id,
-            auth_user_id: u.auth_user_id,
-            name: u.name || (u.email ? u.email.split("@")[0] : "Student"),
-            email: u.email || "",
-            phone: u.parent_phone || null,
-            avatar_url: u.avatar_url || null,
-          };
+          const item = parseUserRecord(u);
           if (u.id) usersMap[u.id] = item;
           if (u.auth_user_id) usersMap[u.auth_user_id] = item;
         });
@@ -288,7 +321,9 @@ export default function LessonGradingPage() {
         const studentInfo = usersMap[p.student_id] || {
           id: p.student_id,
           auth_user_id: p.student_id,
-          name: "Student",
+          name: "",
+          first_name: null,
+          last_name: null,
           email: "",
           phone: null,
         };
@@ -954,26 +989,26 @@ export default function LessonGradingPage() {
                               {/* User picture */}
                               <td className="py-3.5 px-3">
                                 <Avatar className="w-8 h-8 rounded-full border border-purple-200 shadow-xs">
-                                  {st.avatar_url && <AvatarImage src={st.avatar_url} alt={st.name || "Student"} />}
+                                  {st.avatar_url && <AvatarImage src={st.avatar_url} alt={st.name || ""} />}
                                   <AvatarFallback className="bg-purple-100 text-purple-900 font-bold text-[10px]">
-                                    {(st.name || "S").slice(0, 2).toUpperCase()}
+                                    {(st.name ? st.name.slice(0, 2) : st.email ? st.email.slice(0, 2) : "?").toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
                               </td>
 
                               {/* Student Name */}
                               <td className="py-3.5 px-4 font-bold text-foreground">
-                                {st.name || "Student"}
+                                {st.name || <span className="text-muted-foreground font-normal italic text-xs">—</span>}
                               </td>
 
                               {/* Email / Username */}
                               <td className="py-3.5 px-4 text-muted-foreground font-medium">
-                                {st.email || "—"}
+                                {st.email || <span className="text-muted-foreground italic text-xs">—</span>}
                               </td>
 
                               {/* Phone */}
                               <td className="py-3.5 px-3 text-muted-foreground hidden lg:table-cell">
-                                {st.phone || "—"}
+                                {st.phone || <span className="text-muted-foreground italic text-xs">—</span>}
                               </td>
 
                               {/* Status Badge */}
@@ -1531,6 +1566,91 @@ export default function LessonGradingPage() {
           )}
         </div>
 
+        {/* ── 3. Bottom Lesson Navigation Bar (Image 1) ───────────────────────────── */}
+        <div className="space-y-3 pt-2">
+          {/* Checkbox: Download submissions in folders */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+            <Checkbox
+              id="download-folders-cb"
+              checked={downloadInFolders}
+              onCheckedChange={(checked) => setDownloadInFolders(!!checked)}
+              className="border-purple-300 data-[state=checked]:bg-purple-700 data-[state=checked]:border-purple-700"
+            />
+            <label
+              htmlFor="download-folders-cb"
+              className="cursor-pointer font-medium text-foreground select-none flex items-center gap-1.5"
+            >
+              <span>Download submissions in folders</span>
+              <span
+                title="When checked, submissions will be grouped into folders named after each student when downloading."
+                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-muted/60 text-muted-foreground hover:text-foreground text-[10px] font-bold"
+              >
+                ⓘ
+              </span>
+            </label>
+          </div>
+
+          {/* Navigation Bar matching Image 1: Dark Slate/Grey Bar */}
+          <div className="bg-[#2d323e] dark:bg-slate-900 text-white rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md border border-slate-700/60">
+            {/* Left: Previous Lesson Button */}
+            <div className="w-full sm:w-1/3 flex justify-start">
+              {prevLesson ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate(`/courses/${courseId}/lessons/${prevLesson.id}/grading`)}
+                  className="text-slate-200 hover:text-white hover:bg-white/10 text-xs font-semibold gap-1.5 justify-start truncate h-9 px-3 max-w-full"
+                  title={`Go to previous lesson: ${prevLesson.title}`}
+                >
+                  <ChevronLeft className="w-4 h-4 shrink-0 text-slate-400" />
+                  <span className="truncate">← {prevLesson.title}</span>
+                </Button>
+              ) : (
+                <div />
+              )}
+            </div>
+
+            {/* Center: Jump to... Dropdown */}
+            <div className="w-full sm:w-auto min-w-[220px] max-w-xs flex justify-center">
+              <Select
+                value={lessonId}
+                onValueChange={(targetId) => {
+                  if (targetId && targetId !== lessonId) {
+                    navigate(`/courses/${courseId}/lessons/${targetId}/grading`);
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-[#1e222b] border-slate-600 text-slate-200 text-xs h-9 font-medium">
+                  <SelectValue placeholder="Jump to..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-64">
+                  {allLessons.map((l, idx) => (
+                    <SelectItem key={l.id} value={l.id} className="text-xs">
+                      {idx + 1}. {l.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Right: Next Lesson Button */}
+            <div className="w-full sm:w-1/3 flex justify-end">
+              {nextLesson ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate(`/courses/${courseId}/lessons/${nextLesson.id}/grading`)}
+                  className="text-slate-200 hover:text-white hover:bg-white/10 text-xs font-semibold gap-1.5 justify-end truncate h-9 px-3 max-w-full"
+                  title={`Go to next lesson: ${nextLesson.title}`}
+                >
+                  <span className="truncate">{nextLesson.title}</span>
+                  <span className="text-slate-400">▶</span>
+                </Button>
+              ) : (
+                <div />
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* ── 4. Full "View Submission" Modal ────────────────────────────────────── */}
         <Dialog open={!!viewSubmission} onOpenChange={(open) => !open && setViewSubmission(null)}>
           <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-purple-200">
@@ -1539,7 +1659,7 @@ export default function LessonGradingPage() {
                 <div>
                   <DialogTitle className="text-lg font-bold flex items-center gap-2 text-white">
                     <Eye className="w-5 h-5 text-purple-200" />
-                    Submission Details: {viewSubmission?.student?.name || "Student"}
+                    Submission Details: {viewSubmission?.student?.name || "Submission"}
                   </DialogTitle>
                   <DialogDescription className="text-xs mt-1 text-purple-200">
                     {lesson?.title || "Lesson"} · Submitted on{" "}
@@ -1566,13 +1686,13 @@ export default function LessonGradingPage() {
                 <div>
                   <span className="text-muted-foreground block font-medium">Student Name:</span>
                   <span className="font-bold text-sm text-foreground">
-                    {viewSubmission?.student?.name || "Student"}
+                    {viewSubmission?.student?.name || <span className="italic text-muted-foreground">—</span>}
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground block font-medium">Student Contact:</span>
                   <span className="font-semibold text-foreground">
-                    {viewSubmission?.student?.email || "No email"}
+                    {viewSubmission?.student?.email || "—"}
                     {viewSubmission?.student?.phone ? ` · Tel: ${viewSubmission.student.phone}` : ""}
                   </span>
                 </div>

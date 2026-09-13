@@ -38,6 +38,14 @@ export interface ActivityHint {
   text?: string;
   image_url?: string;
   audio_url?: string;
+  video_url?: string;
+}
+
+export interface ActivityStepOutcome {
+  step: number;
+  image_url?: string;
+  video_url?: string;
+  description?: string;
 }
 
 export interface ActivityItem {
@@ -52,6 +60,11 @@ export interface ActivityItem {
   status: "published" | "draft";
   type?: string;
   hints?: ActivityHint[];
+  sample_project_title?: string;
+  sample_project_description?: string;
+  sample_project_image_url?: string;
+  sample_project_video_url?: string;
+  step_outcomes?: ActivityStepOutcome[];
 }
 
 export interface LessonData {
@@ -111,6 +124,12 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
         is_assignment: ex.is_assignment ?? false,
         status: ex.status || "published",
         type: ex.type || "practice",
+        hints: Array.isArray(ex.hints) ? ex.hints : [],
+        sample_project_title: ex.sample_project_title || "Sample Project",
+        sample_project_description: ex.sample_project_description || "",
+        sample_project_image_url: ex.sample_project_image_url || "",
+        sample_project_video_url: ex.sample_project_video_url || "",
+        step_outcomes: Array.isArray(ex.step_outcomes) ? ex.step_outcomes : [],
       }));
     }
     return [];
@@ -139,6 +158,12 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
         is_assignment: ex.is_assignment ?? false,
         status: ex.status || "published",
         type: ex.type || "practice",
+        hints: Array.isArray(ex.hints) ? ex.hints : [],
+        sample_project_title: ex.sample_project_title || "Sample Project",
+        sample_project_description: ex.sample_project_description || "",
+        sample_project_image_url: ex.sample_project_image_url || "",
+        sample_project_video_url: ex.sample_project_video_url || "",
+        step_outcomes: Array.isArray(ex.step_outcomes) ? ex.step_outcomes : [],
       })));
     } else {
       setActivities([]);
@@ -209,6 +234,12 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
       is_assignment: false,
       status: "published",
       type: "practice",
+      hints: [],
+      sample_project_title: "Sample Project",
+      sample_project_description: "Follow the instructions in this area to build your own project.",
+      sample_project_image_url: "",
+      sample_project_video_url: "",
+      step_outcomes: [],
     };
     setActivities(prev => [...prev, newAct]);
   };
@@ -610,23 +641,73 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                   </div>
                 </div>
 
-                {/* 9. Step Hints & Audio Guidance */}
+                {/* 9. Sample Project / Outcome Preview (Image 3) */}
+                <div className="space-y-3 pt-3 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
+                        <span>9. Sample Project &amp; Expected Outcome Preview (Shown to students as target model)</span>
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Add a sample screenshot or video showing what the project should look like upon completion.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-lg border border-blue-500/20 bg-blue-500/5">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-semibold text-muted-foreground">Sample Project Outcome Screenshot / Image URL</Label>
+                      <Input
+                        placeholder="https://... image URL (Scratch screenshot, finished app, etc.)"
+                        value={act.sample_project_image_url || ""}
+                        onChange={(e) => updateActivity(index, "sample_project_image_url", e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-semibold text-muted-foreground">Sample Project Demonstration Video URL (Optional)</Label>
+                      <Input
+                        placeholder="https://youtube.com/... or direct video link"
+                        value={act.sample_project_video_url || ""}
+                        onChange={(e) => updateActivity(index, "sample_project_video_url", e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <Label className="text-[11px] font-semibold text-muted-foreground">Guidance Note for Sample Project</Label>
+                      <Input
+                        placeholder="e.g. Follow the instructions in this area to build your own project."
+                        value={act.sample_project_description || ""}
+                        onChange={(e) => updateActivity(index, "sample_project_description", e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 10. Step Hints & Guidance (Image 4) */}
                 <div className="space-y-2 pt-3 border-t">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                      <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-                      <span>9. Step Hints &amp; Audio Guidance (Text, Code Snapshots, Voice Instructions)</span>
-                    </Label>
+                    <div>
+                      <Label className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                        <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                        <span>10. Step Hints &amp; Guidance (Short Video Clip, Text Clue, Image, or Voice Note)</span>
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Displayed to students inside an expandable "Need a hint? +" accordion on each step.
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs gap-1 border-amber-500/40 text-amber-600 hover:bg-amber-50"
+                      className="h-7 text-xs gap-1 border-amber-500/40 text-amber-600 hover:bg-amber-50 shrink-0"
                       onClick={() => {
                         const currentHints = act.hints || [];
                         updateActivity(index, "hints", [
                           ...currentHints,
-                          { step: 1, text: "", image_url: "", audio_url: "" }
+                          { step: 1, text: "", video_url: "", image_url: "", audio_url: "" }
                         ]);
                       }}
                     >
@@ -638,7 +719,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                   {act.hints && act.hints.length > 0 && (
                     <div className="space-y-2 pt-1">
                       {act.hints.map((hint, hIdx) => (
-                        <div key={hIdx} className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2 text-xs">
+                        <div key={hIdx} className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2.5 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-amber-800 dark:text-amber-200">Hint for:</span>
@@ -650,7 +731,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                   updateActivity(index, "hints", copy);
                                 }}
                               >
-                                <SelectTrigger className="h-7 text-xs w-28">
+                                <SelectTrigger className="h-7 text-xs w-28 bg-background">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -659,6 +740,9 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                   <SelectItem value="3">Step 3</SelectItem>
                                   <SelectItem value="4">Step 4</SelectItem>
                                   <SelectItem value="5">Step 5</SelectItem>
+                                  <SelectItem value="6">Step 6</SelectItem>
+                                  <SelectItem value="7">Step 7</SelectItem>
+                                  <SelectItem value="8">Step 8</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -676,22 +760,35 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                             </Button>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             <div>
-                              <Label className="text-[11px] text-muted-foreground">Text Clue / Explanation</Label>
+                              <Label className="text-[11px] text-muted-foreground font-medium">Text Clue / Explanation</Label>
                               <Input
-                                placeholder="Clue or step details..."
+                                placeholder="Clue or step guidance..."
                                 value={hint.text || ""}
                                 onChange={(e) => {
                                   const copy = [...(act.hints || [])];
                                   copy[hIdx] = { ...copy[hIdx], text: e.target.value };
                                   updateActivity(index, "hints", copy);
                                 }}
-                                className="h-7 text-xs"
+                                className="h-7 text-xs bg-background"
                               />
                             </div>
                             <div>
-                              <Label className="text-[11px] text-muted-foreground">Image / Code Snapshot URL</Label>
+                              <Label className="text-[11px] text-muted-foreground font-medium">Short Video Clip URL (YouTube, MP4)</Label>
+                              <Input
+                                placeholder="https://youtube.com/watch?v=... or .mp4"
+                                value={hint.video_url || ""}
+                                onChange={(e) => {
+                                  const copy = [...(act.hints || [])];
+                                  copy[hIdx] = { ...copy[hIdx], video_url: e.target.value };
+                                  updateActivity(index, "hints", copy);
+                                }}
+                                className="h-7 text-xs bg-background"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] text-muted-foreground font-medium">Image / Code Snapshot URL</Label>
                               <Input
                                 placeholder="https://... image URL"
                                 value={hint.image_url || ""}
@@ -700,11 +797,11 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                   copy[hIdx] = { ...copy[hIdx], image_url: e.target.value };
                                   updateActivity(index, "hints", copy);
                                 }}
-                                className="h-7 text-xs"
+                                className="h-7 text-xs bg-background"
                               />
                             </div>
                             <div>
-                              <Label className="text-[11px] text-muted-foreground">Audio Voice URL (For kids)</Label>
+                              <Label className="text-[11px] text-muted-foreground font-medium">Audio Voice URL (For kids)</Label>
                               <Input
                                 placeholder="https://... audio.mp3"
                                 value={hint.audio_url || ""}
@@ -713,7 +810,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                                   copy[hIdx] = { ...copy[hIdx], audio_url: e.target.value };
                                   updateActivity(index, "hints", copy);
                                 }}
-                                className="h-7 text-xs"
+                                className="h-7 text-xs bg-background"
                               />
                             </div>
                           </div>
