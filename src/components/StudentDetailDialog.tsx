@@ -24,9 +24,10 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchDirectoryUser } from "@/utils/studentDirectory";
 
 interface StudentDetailDialogProps {
-  studentId: string; // auth_user_id
+  studentId: string; // users.id or users.auth_user_id
   studentName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -42,9 +43,12 @@ interface UserProfileData {
   role: string;
   avatar_url?: string;
   created_at?: string;
-  parent_name?: string;
+  phone?: string;
+  city?: string;
+  country?: string;
   parent_email?: string;
-  parent_phone?: string;
+  last_login?: string;
+  last_access?: string;
 }
 
 interface EnrolledCourse {
@@ -109,16 +113,23 @@ export function StudentDetailDialog({
   const loadStudentData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Profile info
+      // 1. Resolve the person behind the identifier (users.id or auth_user_id)
+      const directoryUser = await fetchDirectoryUser(studentId);
+
       const { data: userData } = await supabase
         .from("users")
         .select("*")
-        .eq("auth_user_id", studentId)
+        .eq("id", directoryUser?.id || studentId)
         .maybeSingle();
 
-      if (userData) {
-        setProfile(userData as any);
-      }
+      const resolved = (userData ?? directoryUser ?? null) as UserProfileData | null;
+      setProfile(resolved);
+
+      // Records may reference either identifier, so query against both
+      const identifiers = Array.from(
+        new Set([studentId, directoryUser?.id, directoryUser?.auth_user_id, resolved?.id, resolved?.auth_user_id].filter(Boolean))
+      ) as string[];
+      const idFilter = `(${identifiers.join(",")})`;
 
       // 2. Fetch Enrolled Courses & Progress
       const { data: enrollments } = await supabase
@@ -134,7 +145,7 @@ export function StudentDetailDialog({
             category
           )
         `)
-        .eq("student_id", studentId);
+        .filter("student_id", "in", idFilter);
 
       if (enrollments) {
         const mappedCourses: EnrolledCourse[] = enrollments.map((e: any) => ({
@@ -163,7 +174,7 @@ export function StudentDetailDialog({
             title
           )
         `)
-        .eq("student_id", studentId)
+        .filter("student_id", "in", idFilter)
         .order("submitted_at", { ascending: false });
 
       if (projectsData) {
@@ -194,7 +205,7 @@ export function StudentDetailDialog({
             title
           )
         `)
-        .eq("student_id", studentId)
+        .filter("student_id", "in", idFilter)
         .order("created_at", { ascending: false });
 
       if (reportsData) {
@@ -214,9 +225,9 @@ export function StudentDetailDialog({
       const { data: logsData } = await supabase
         .from("audit_logs")
         .select("*")
-        .eq("performed_by", studentId)
+        .filter("performed_by", "in", idFilter)
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(200);
 
       if (logsData) {
         setAuditLogs(logsData);
@@ -242,6 +253,28 @@ export function StudentDetailDialog({
     }
     return true;
   });
+
+  // Activity derivations
+  const loginLogs = auditLogs.filter((l) => l.action_type === "login");
+  const logoutLogs = auditLogs.filter((l) => l.action_type === "logout");
+  const oldestLog = auditLogs.length > 0 ? auditLogs[auditLogs.length - 1] : null;
+
+  const firstVisit =
+    loginLogs.length > 0
+      ? loginLogs[loginLogs.length - 1].created_at
+      : oldestLog?.created_at || profile?.created_at || null;
+
+  const lastVisit = profile?.last_access || profile?.last_login || auditLogs[0]?.created_at || null;
+  const lastLogin = profile?.last_login || loginLogs[0]?.created_at || null;
+  const todaysLogs = auditLogs.filter((l) => l.created_at?.startsWith(todayStr));
+
+  // Most recent event that happened before the student last signed out
+  const lastLogout = logoutLogs[0] || null;
+  const lastActivityBeforeLogout = lastLogout
+    ? auditLogs.find((l) => l.id !== lastLogout.id && l.created_at < lastLogout.created_at) || null
+    : null;
+
+  const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "No record yet");
 
   // Calculate average grade
   const validGrades = grades.filter((g) => typeof g.grade === "number" && !isNaN(g.grade));
@@ -361,26 +394,28 @@ export function StudentDetailDialog({
                   </CardContent>
                 </Card>
 
-                {/* Parent / Guardian Information */}
+                {/* Contact & Guardian Information */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                       <Shield className="w-4 h-4 text-blue-500" />
-                      Guardian & Contact Info
+                      Contact & Guardian Info
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                     <div className="space-y-1">
-                      <span className="text-muted-foreground font-medium">Parent/Guardian Name</span>
-                      <p className="font-semibold text-foreground">{profile?.parent_name || "Not listed"}</p>
+                      <span className="text-muted-foreground font-medium">Phone</span>
+                      <p className="font-semibold text-foreground">{profile?.phone || "Not listed"}</p>
                     </div>
                     <div className="space-y-1">
                       <span className="text-muted-foreground font-medium">Parent Email</span>
                       <p className="font-semibold text-foreground">{profile?.parent_email || "Not listed"}</p>
                     </div>
                     <div className="space-y-1">
-                      <span className="text-muted-foreground font-medium">Parent Phone</span>
-                      <p className="font-semibold text-foreground">{profile?.parent_phone || "Not listed"}</p>
+                      <span className="text-muted-foreground font-medium">Location</span>
+                      <p className="font-semibold text-foreground">
+                        {[profile?.city, profile?.country].filter(Boolean).join(", ") || "Not listed"}
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -555,6 +590,76 @@ export function StudentDetailDialog({
 
               {/* Tab 6: Login Activities & Audit */}
               <TabsContent value="activity" className="space-y-3 mt-3">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-primary" />
+                      Platform Visits
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground font-medium">First time on the platform</span>
+                      <p className="font-semibold text-foreground">{formatDateTime(firstVisit)}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground font-medium">Most recent visit</span>
+                      <p className="font-semibold text-foreground">{formatDateTime(lastVisit)}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground font-medium">Last login</span>
+                      <p className="font-semibold text-foreground">{formatDateTime(lastLogin)}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground font-medium">Last logout</span>
+                      <p className="font-semibold text-foreground">{formatDateTime(lastLogout?.created_at)}</p>
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <span className="text-muted-foreground font-medium">Last activity before logging out</span>
+                      <p className="font-semibold text-foreground">
+                        {lastActivityBeforeLogout
+                          ? `${lastActivityBeforeLogout.action_type} · ${formatDateTime(lastActivityBeforeLogout.created_at)}`
+                          : "No record yet"}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="p-2.5 rounded-lg border bg-card">
+                    <div className="text-muted-foreground">Today's logs</div>
+                    <div className="text-sm font-bold text-foreground">{todaysLogs.length}</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg border bg-card">
+                    <div className="text-muted-foreground">Logins</div>
+                    <div className="text-sm font-bold text-foreground">{loginLogs.length}</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg border bg-card">
+                    <div className="text-muted-foreground">All events</div>
+                    <div className="text-sm font-bold text-foreground">{auditLogs.length}</div>
+                  </div>
+                </div>
+
+                {todaysLogs.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold text-foreground">Today's activity</div>
+                    {todaysLogs.slice(0, 10).map((log) => (
+                      <div
+                        key={`today-${log.id}`}
+                        className="p-2.5 rounded-md border bg-card flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Activity className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="font-mono text-foreground font-medium">{log.action_type}</span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(log.created_at).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border text-xs">
                   <span className="text-muted-foreground font-medium">Session & Audit Trail</span>
                   <span className="text-muted-foreground">{auditLogs.length} events logged</span>
