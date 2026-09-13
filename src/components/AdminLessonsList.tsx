@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useNavigate } from "react-router-dom";
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -20,7 +21,11 @@ import {
   FileText,
   Video,
   BookOpen,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink,
+  Code2,
+  Download,
+  Clock
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,6 +68,7 @@ interface AdminLessonsListProps {
 export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, onToggle }: AdminLessonsListProps) {
   const { userProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
@@ -70,6 +76,10 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [submissionsDialogOpen, setSubmissionsDialogOpen] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [viewingCode, setViewingCode] = useState<{ title: string; code: string } | null>(null);
+  const [gradeInput, setGradeInput] = useState<Record<string, string>>({});
+  const [feedbackInput, setFeedbackInput] = useState<Record<string, string>>({});
+  const [savingGradeId, setSavingGradeId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -116,17 +126,49 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
           title,
           description,
           link,
+          file_path,
+          code_content,
+          editor_type,
           submitted_at,
           grade,
           feedback,
           review_status,
-          student:users!projects_student_id_fkey(name, email, first_name, last_name)
+          student_id
         `)
-        .eq('course_id', courseId)
+        .eq('lesson_id', lessonId)
         .order('submitted_at', { ascending: false });
 
       if (error) throw error;
-      setSubmissions(data || []);
+
+      const studentIds = Array.from(new Set((data || []).map(p => p.student_id).filter(Boolean)));
+      let usersMap: Record<string, any> = {};
+      if (studentIds.length > 0) {
+        const { data: uData } = await supabase
+          .from('users')
+          .select('id, auth_user_id, name, email, parent_phone, avatar_url')
+          .or(`id.in.(${studentIds.join(',')}),auth_user_id.in.(${studentIds.join(',')})`);
+
+        (uData || []).forEach(u => {
+          if (u.id) usersMap[u.id] = u;
+          if (u.auth_user_id) usersMap[u.auth_user_id] = u;
+        });
+      }
+
+      const initialGrades: Record<string, string> = {};
+      const initialFeedback: Record<string, string> = {};
+
+      const enriched = (data || []).map(p => {
+        initialGrades[p.id] = p.grade !== null ? p.grade.toString() : '';
+        initialFeedback[p.id] = p.feedback || '';
+        return {
+          ...p,
+          student: usersMap[p.student_id] || { name: 'Student', email: '' }
+        };
+      });
+
+      setGradeInput(initialGrades);
+      setFeedbackInput(initialFeedback);
+      setSubmissions(enriched);
       setSubmissionsDialogOpen(true);
     } catch (error) {
       console.error('Error fetching submissions:', error);
@@ -135,6 +177,36 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
         description: "Failed to load submissions.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleSaveGradeInDialog = async (submissionId: string) => {
+    const gVal = gradeInput[submissionId];
+    if (!gVal || isNaN(Number(gVal))) {
+      toast({ title: "Enter a valid grade (0-100)", variant: "destructive" });
+      return;
+    }
+    const num = Math.min(100, Math.max(0, parseInt(gVal, 10)));
+    setSavingGradeId(submissionId);
+    try {
+      const fb = feedbackInput[submissionId]?.trim() || null;
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          grade: num,
+          feedback: fb,
+          review_status: 'graded',
+          graded_at: new Date().toISOString(),
+        })
+        .eq('id', submissionId);
+
+      if (error) throw error;
+      toast({ title: "Grade saved successfully!" });
+      setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, grade: num, feedback: fb, review_status: 'graded' } : s));
+    } catch (err: any) {
+      toast({ title: "Error saving grade", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingGradeId(null);
     }
   };
 
@@ -393,39 +465,168 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
 
         {/* Submissions Dialog */}
         <Dialog open={submissionsDialogOpen} onOpenChange={setSubmissionsDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Student Submissions</DialogTitle>
-              <DialogDescription>
-                Submissions for {selectedLesson?.title}
-              </DialogDescription>
+          <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+            <DialogHeader className="pb-3 border-b">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <DialogTitle className="text-lg font-bold">Student Submissions</DialogTitle>
+                  <DialogDescription className="text-xs">
+                    Submissions for {selectedLesson?.title}
+                  </DialogDescription>
+                </div>
+                {selectedLesson && (
+                  <Button
+                    size="sm"
+                    className="bg-[#1b4332] hover:bg-[#143225] text-white text-xs gap-1.5 shrink-0"
+                    onClick={() => {
+                      setSubmissionsDialogOpen(false);
+                      navigate(`/courses/${courseId}/lessons/${selectedLesson.id}/grading`);
+                    }}
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Open Full Submissions Page ↗
+                  </Button>
+                )}
+              </div>
             </DialogHeader>
-            <div className="max-h-96 overflow-y-auto space-y-3">
+            <div className="flex-1 overflow-y-auto space-y-3 py-2">
               {submissions.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No submissions yet.</p>
+                <div className="text-center py-12 text-muted-foreground space-y-2">
+                  <FileText className="w-10 h-10 mx-auto opacity-30" />
+                  <p>No submissions recorded for this lesson yet.</p>
+                </div>
               ) : (
                 submissions.map((sub) => (
-                  <div key={sub.id} className="p-3 border rounded-lg">
-                    <div className="flex justify-between items-start">
+                  <div key={sub.id} className="p-4 border rounded-lg bg-card space-y-3 shadow-xs">
+                    <div className="flex justify-between items-start gap-3">
                       <div>
-                        <p className="font-medium">{sub.student?.first_name} {sub.student?.last_name || sub.student?.name}</p>
-                        <p className="text-sm text-muted-foreground">{sub.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Submitted: {new Date(sub.submitted_at).toLocaleDateString()}
+                        <p className="font-bold text-sm text-foreground">
+                          {sub.student?.name || sub.student?.email || "Student"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{sub.student?.email}</p>
+                        <p className="text-xs font-semibold text-primary mt-1">
+                          {sub.title || "Project Submission"}
+                        </p>
+                        {sub.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {sub.description}
+                          </p>
+                        )}
+                        <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Submitted: {new Date(sub.submitted_at).toLocaleString()}
                         </p>
                       </div>
-                      <div className="text-right">
-                        {sub.grade !== null ? (
-                          <Badge variant="default">{sub.grade}%</Badge>
+                      <div className="text-right shrink-0">
+                        {sub.grade !== null || sub.review_status === "graded" ? (
+                          <Badge className="bg-emerald-600 text-white text-xs">
+                            Graded: {sub.grade}%
+                          </Badge>
                         ) : (
-                          <Badge variant="outline">Pending</Badge>
+                          <Badge className="bg-amber-500 text-white text-xs">
+                            Pending Review
+                          </Badge>
                         )}
                       </div>
+                    </div>
+
+                    {/* Actual Submission Links & Code */}
+                    <div className="p-3 bg-muted/40 rounded-md border text-xs space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Actual URL link */}
+                        {sub.link && (
+                          <a
+                            href={sub.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-bold hover:underline border border-blue-200 text-xs"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open Student Link: {sub.link}
+                          </a>
+                        )}
+
+                        {/* Submitted Code Button */}
+                        {sub.code_content && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1.5"
+                            onClick={() => setViewingCode({ title: sub.title || "Submitted Code", code: sub.code_content })}
+                          >
+                            <Code2 className="w-3.5 h-3.5" />
+                            View Submitted Code
+                          </Button>
+                        )}
+
+                        {/* File download link */}
+                        {sub.file_path && (
+                          <a
+                            href={supabase.storage.from("project-submissions").getPublicUrl(sub.file_path).data.publicUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 font-bold hover:underline border border-purple-200 text-xs"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            Download Project File
+                          </a>
+                        )}
+
+                        {!sub.link && !sub.code_content && !sub.file_path && (
+                          <span className="text-muted-foreground italic">No external link or code attached.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Quick Grade & Feedback inputs */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <div className="w-24">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="Grade %"
+                          value={gradeInput[sub.id] ?? ""}
+                          onChange={(e) => setGradeInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                          className="h-8 text-xs font-semibold"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Feedback..."
+                          value={feedbackInput[sub.id] ?? ""}
+                          onChange={(e) => setFeedbackInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={savingGradeId === sub.id}
+                        onClick={() => handleSaveGradeInDialog(sub.id)}
+                        className="h-8 text-xs bg-[#1b4332] hover:bg-[#143225] text-white shrink-0"
+                      >
+                        {savingGradeId === sub.id ? "Saving..." : "Save Grade"}
+                      </Button>
                     </div>
                   </div>
                 ))
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Code Viewer Dialog */}
+        <Dialog open={!!viewingCode} onOpenChange={() => setViewingCode(null)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-sm">
+                <Code2 className="w-4 h-4 text-primary" />
+                {viewingCode?.title}
+              </DialogTitle>
+            </DialogHeader>
+            <pre className="p-4 bg-zinc-950 text-zinc-100 font-mono text-xs rounded-lg overflow-auto flex-1 whitespace-pre-wrap leading-relaxed">
+              {viewingCode?.code}
+            </pre>
           </DialogContent>
         </Dialog>
       </CollapsibleContent>

@@ -27,6 +27,7 @@ import Badges from "./pages/Badges";
 import Lessons from "./pages/Lessons";
 import TutorCourseDetail from "./pages/TutorCourseDetail";
 import PublicPortfolio from "./pages/PublicPortfolio";
+import LessonGradingPage from "./pages/LessonGradingPage";
 
 
 
@@ -119,6 +120,21 @@ const App = () => (
           <Route path="/tutor/course/:courseId" element={
             <ProtectedRoute>
               <TutorCourseDetail />
+            </ProtectedRoute>
+          } />
+          <Route path="/courses/:courseId/lessons/:lessonId/grading" element={
+            <ProtectedRoute>
+              <LessonGradingPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/courses/:courseId/lessons/:lessonId/submissions" element={
+            <ProtectedRoute>
+              <LessonGradingPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/grading/:courseId/:lessonId" element={
+            <ProtectedRoute>
+              <LessonGradingPage />
             </ProtectedRoute>
           } />
           <Route path="/portfolio/student/:studentId" element={<PublicPortfolio />} />

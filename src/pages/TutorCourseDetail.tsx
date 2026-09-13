@@ -313,9 +313,23 @@ export default function TutorCourseDetail() {
                           </div>
                         </div>
                       </div>
-                      <Button variant="ghost" size="sm">
-                        View Lesson
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="h-8 text-xs gap-1 bg-[#1b4332]/10 text-[#1b4332] dark:text-emerald-400 hover:bg-[#1b4332]/20 border-[#1b4332]/30"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/courses/${courseId}/lessons/${lesson.id}/grading`);
+                          }}
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Submissions & Grading
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs">
+                          View Lesson
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
