@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
+import { fetchUserDirectory, DirectoryUser } from "@/utils/studentDirectory";
 
 type Filter = "all" | "requires_grading" | "submitted" | "not_submitted";
 
@@ -45,7 +46,7 @@ interface LessonSubmissionsProps {
 export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps) {
   const { toast } = useToast();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [allStudents, setAllStudents] = useState<{ auth_user_id: string; first_name: string | null; last_name: string | null; email: string | null }[]>([]);
+  const [allStudents, setAllStudents] = useState<DirectoryUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [gradingId, setGradingId] = useState<string | null>(null);
   const [grade, setGrade] = useState("");
@@ -76,11 +77,9 @@ export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps
 
     if (data && data.length > 0) {
       const ids = data.map(e => e.student_id);
-      const { data: students } = await supabase
-        .from("users")
-        .select("auth_user_id, first_name, last_name, email")
-        .in("auth_user_id", ids);
-      setAllStudents(students || []);
+      const directory = await fetchUserDirectory(ids);
+      const students = Array.from(new Set(ids.map(id => directory[id]).filter(Boolean)));
+      setAllStudents(students);
     }
   };
 
@@ -94,16 +93,13 @@ export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps
 
       if (error) throw error;
 
-      const withStudents = await Promise.all(
-        (data || []).map(async (sub) => {
-          const { data: student } = await supabase
-            .from("users")
-            .select("name, first_name, last_name, email, phone, parent_phone, avatar_url")
-            .or(`id.eq.${sub.student_id},auth_user_id.eq.${sub.student_id}`)
-            .maybeSingle();
-          return { ...sub, student };
-        })
-      );
+      const studentIds = Array.from(new Set((data || []).map(s => s.student_id).filter(Boolean))) as string[];
+      const directory = studentIds.length > 0 ? await fetchUserDirectory(studentIds) : {};
+
+      const withStudents = (data || []).map((sub) => ({
+        ...sub,
+        student: sub.student_id ? directory[sub.student_id] || null : null,
+      }));
 
       setSubmissions(withStudents);
     } catch (err: any) {
@@ -176,7 +172,7 @@ export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps
 
   // Build merged list: submissions + enrolled students with no submission
   const submittedIds = new Set(submissions.map(s => s.student_id));
-  const notSubmittedStudents = allStudents.filter(s => !submittedIds.has(s.auth_user_id));
+  const notSubmittedStudents = allStudents.filter(s => !submittedIds.has(s.auth_user_id) && !submittedIds.has(s.id));
 
   const filteredSubmissions = filter === "not_submitted"
     ? [] // shown below from notSubmittedStudents

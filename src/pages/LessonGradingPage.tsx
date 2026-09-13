@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { LMSLayout } from "@/components/LMSLayout";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
+import { fetchUserDirectory } from "@/utils/studentDirectory";
+import { StudentDetailDialog } from "@/components/StudentDetailDialog";
 
 type StatusFilter = "no_filter" | "needs_grading" | "submitted" | "not_submitted";
 type PageTab = "assignment" | "settings" | "advanced_grading";
@@ -127,9 +129,25 @@ export default function LessonGradingPage() {
   // Inline grading state map
   const [gradingValues, setGradingValues] = useState<Record<string, { grade: string; feedback: string }>>({});
   const [savingGradeId, setSavingGradeId] = useState<string | null>(null);
+  // Submissions with unsaved edits, preserved across realtime reloads
+  const dirtyDrafts = useRef<Set<string>>(new Set());
+
+  const setDraft = (
+    submissionId: string,
+    patch: Partial<{ grade: string; feedback: string }>
+  ) => {
+    dirtyDrafts.current.add(submissionId);
+    setGradingValues((prev) => ({
+      ...prev,
+      [submissionId]: { grade: "", feedback: "", ...prev[submissionId], ...patch },
+    }));
+  };
 
   // View Submission Modal state
   const [viewSubmission, setViewSubmission] = useState<SubmissionItem | null>(null);
+
+  // Student detail drill-down
+  const [detailStudent, setDetailStudent] = useState<EnrolledStudent | null>(null);
   const [codeTab, setCodeTab] = useState<"code" | "preview">("code");
 
   // Current lesson navigation calculations (Image 1)
@@ -173,6 +191,25 @@ export default function LessonGradingPage() {
       loadData();
     }
   }, [courseId, lessonId]);
+
+  // Keep the table in sync as students submit or profiles are updated
+  useEffect(() => {
+    if (!lessonId) return;
+
+    const channel = supabase
+      .channel(`lesson-grading-${lessonId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects", filter: `lesson_id=eq.${lessonId}` },
+        () => loadData()
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "users" }, () => loadData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [lessonId, courseId]);
 
   const loadData = async () => {
     setLoading(true);
@@ -250,64 +287,8 @@ export default function LessonGradingPage() {
       });
       const allUniqueIds = Array.from(allStudentIdSet);
 
-      // Helper to build EnrolledStudent from user row
-      const parseUserRecord = (u: any): EnrolledStudent => {
-        const fn = u.first_name?.trim() || "";
-        const ln = u.last_name?.trim() || "";
-        const combined = [fn, ln].filter(Boolean).join(" ");
-        const studentName = combined || (u.name && u.name.trim()) || "";
-        const studentPhone = u.phone || u.parent_phone || null;
-
-        return {
-          id: u.id,
-          auth_user_id: u.auth_user_id,
-          name: studentName,
-          first_name: u.first_name || null,
-          last_name: u.last_name || null,
-          email: u.email || "",
-          phone: studentPhone,
-          avatar_url: u.avatar_url || null,
-        };
-      };
-
-      // Query users table for all student records
-      const usersMap: Record<string, EnrolledStudent> = {};
-
-      if (allUniqueIds.length > 0) {
-        // Query by id
-        const { data: byId } = await supabase
-          .from("users")
-          .select("id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url")
-          .in("id", allUniqueIds);
-
-        // Query by auth_user_id
-        const { data: byAuth } = await supabase
-          .from("users")
-          .select("id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url")
-          .in("auth_user_id", allUniqueIds);
-
-        const foundUsers = [...(byId || []), ...(byAuth || [])];
-        foundUsers.forEach((u) => {
-          const item = parseUserRecord(u);
-          if (u.id) usersMap[u.id] = item;
-          if (u.auth_user_id) usersMap[u.auth_user_id] = item;
-        });
-      }
-
-      // If any ID is still not found in usersMap, fallback search across users table
-      const stillMissing = allUniqueIds.filter((id) => !usersMap[id]);
-      if (stillMissing.length > 0) {
-        const { data: fallbackUsers } = await supabase
-          .from("users")
-          .select("id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url")
-          .limit(300);
-
-        (fallbackUsers || []).forEach((u) => {
-          const item = parseUserRecord(u);
-          if (u.id) usersMap[u.id] = item;
-          if (u.auth_user_id) usersMap[u.auth_user_id] = item;
-        });
-      }
+      // Resolve every student identifier (users.id or auth_user_id) to a real person
+      const usersMap = await fetchUserDirectory(allUniqueIds);
 
       // Build enrolled student list
       const studentList: EnrolledStudent[] = (enrollments || [])
@@ -340,7 +321,13 @@ export default function LessonGradingPage() {
       });
 
       setSubmissions(enrichedSubmissions);
-      setGradingValues(initialGradingMap);
+      setGradingValues((prev) => {
+        const merged = { ...initialGradingMap };
+        dirtyDrafts.current.forEach((id) => {
+          if (prev[id]) merged[id] = prev[id];
+        });
+        return merged;
+      });
     } catch (err: any) {
       console.error("Error loading submissions page data:", err);
       toast({
@@ -476,6 +463,7 @@ export default function LessonGradingPage() {
 
       if (error) throw error;
 
+      dirtyDrafts.current.delete(submissionId);
       soundEffects.playSuccess();
       toast({ title: "Grade Saved!", description: `Assigned ${numGrade}% to student.` });
 
@@ -509,6 +497,57 @@ export default function LessonGradingPage() {
     } catch (err: any) {
       console.error("Save grade error:", err);
       toast({ title: "Failed to save grade", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingGradeId(null);
+    }
+  };
+
+  // Remove an existing grade and send the submission back for grading
+  const handleUngrade = async (submissionId: string) => {
+    setSavingGradeId(submissionId);
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          grade: null,
+          feedback: null,
+          review_status: "submitted",
+          graded_at: null,
+        })
+        .eq("id", submissionId);
+
+      if (error) throw error;
+
+      toast({ title: "Grade removed", description: "Submission is back in the needs-grading queue." });
+
+      dirtyDrafts.current.delete(submissionId);
+      setGradingValues((prev) => ({ ...prev, [submissionId]: { grade: "", feedback: "" } }));
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === submissionId ? { ...s, grade: null, feedback: null, review_status: "submitted" } : s
+        )
+      );
+
+      const sub = submissions.find((s) => s.id === submissionId);
+      const studentAuthId = sub?.student?.auth_user_id || sub?.student_id;
+      if (studentAuthId && autoNotify) {
+        createNotification({
+          recipientUserId: studentAuthId,
+          type: "project_graded",
+          title: `Grade Removed: ${sub?.title || lesson?.title || "Assignment"}`,
+          message: "Your submission is being re-reviewed and will be graded again shortly.",
+          data: { course_id: courseId, lesson_id: lessonId, project_id: submissionId },
+        }).catch((e) => console.warn(e));
+      }
+
+      if (viewSubmission?.id === submissionId) {
+        setViewSubmission((prev) =>
+          prev ? { ...prev, grade: null, feedback: null, review_status: "submitted" } : null
+        );
+      }
+    } catch (err: any) {
+      console.error("Ungrade error:", err);
+      toast({ title: "Failed to remove grade", description: err.message, variant: "destructive" });
     } finally {
       setSavingGradeId(null);
     }
@@ -998,7 +1037,18 @@ export default function LessonGradingPage() {
 
                               {/* Student Name */}
                               <td className="py-3.5 px-4 font-bold text-foreground">
-                                {st.name || <span className="text-muted-foreground font-normal italic text-xs">—</span>}
+                                {st.name ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDetailStudent(st)}
+                                    className="text-purple-700 dark:text-purple-300 hover:underline font-bold text-left"
+                                    title={`View ${st.name}'s full profile, grades and activity`}
+                                  >
+                                    {st.name}
+                                  </button>
+                                ) : (
+                                  <span className="text-muted-foreground font-normal italic text-xs">—</span>
+                                )}
                               </td>
 
                               {/* Email / Username */}
@@ -1039,15 +1089,7 @@ export default function LessonGradingPage() {
                                       min="0"
                                       max="100"
                                       value={vals.grade}
-                                      onChange={(e) =>
-                                        setGradingValues((prev) => ({
-                                          ...prev,
-                                          [sub.id]: {
-                                            ...vals,
-                                            grade: e.target.value,
-                                          },
-                                        }))
-                                      }
+                                      onChange={(e) => setDraft(sub.id, { grade: e.target.value })}
                                       className="w-14 h-8 text-center text-xs font-semibold bg-background p-1 border-purple-200"
                                       placeholder="—"
                                     />
@@ -1064,6 +1106,18 @@ export default function LessonGradingPage() {
                                         "Grade"
                                       )}
                                     </Button>
+                                    {(sub.grade !== null || sub.review_status === "graded") && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleUngrade(sub.id)}
+                                        disabled={savingGradeId === sub.id}
+                                        className="h-8 px-2.5 text-xs border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50 font-semibold"
+                                        title="Remove this grade and return the submission for grading"
+                                      >
+                                        Ungrade
+                                      </Button>
+                                    )}
                                   </div>
                                 ) : (
                                   <span className="text-muted-foreground italic text-[11px]">—</span>
@@ -1148,15 +1202,7 @@ export default function LessonGradingPage() {
                                 {row.isSubmitted && sub ? (
                                   <Input
                                     value={vals.feedback}
-                                    onChange={(e) =>
-                                      setGradingValues((prev) => ({
-                                        ...prev,
-                                        [sub.id]: {
-                                          ...vals,
-                                          feedback: e.target.value,
-                                        },
-                                      }))
-                                    }
+                                    onChange={(e) => setDraft(sub.id, { feedback: e.target.value })}
                                     onBlur={() => {
                                       if (sub.grade !== null && vals.feedback !== sub.feedback) {
                                         handleSaveGrade(sub.id);
@@ -1827,13 +1873,7 @@ export default function LessonGradingPage() {
                       value={viewSubmission ? gradingValues[viewSubmission.id]?.grade || "" : ""}
                       onChange={(e) => {
                         if (!viewSubmission) return;
-                        setGradingValues((prev) => ({
-                          ...prev,
-                          [viewSubmission.id]: {
-                            ...prev[viewSubmission.id],
-                            grade: e.target.value,
-                          },
-                        }));
+                        setDraft(viewSubmission.id, { grade: e.target.value });
                       }}
                       className="h-9 text-sm font-bold bg-background border-purple-200"
                       placeholder="e.g. 95"
@@ -1847,19 +1887,13 @@ export default function LessonGradingPage() {
                       value={viewSubmission ? gradingValues[viewSubmission.id]?.feedback || "" : ""}
                       onChange={(e) => {
                         if (!viewSubmission) return;
-                        setGradingValues((prev) => ({
-                          ...prev,
-                          [viewSubmission.id]: {
-                            ...prev[viewSubmission.id],
-                            feedback: e.target.value,
-                          },
-                        }));
+                        setDraft(viewSubmission.id, { feedback: e.target.value });
                       }}
                       placeholder="Great work on this activity! Keep it up..."
                       className="h-9 text-xs bg-background border-purple-200"
                     />
                   </div>
-                  <div className="self-end">
+                  <div className="self-end flex items-center gap-2">
                     <Button
                       onClick={() => viewSubmission && handleSaveGrade(viewSubmission.id)}
                       disabled={savingGradeId === viewSubmission?.id}
@@ -1871,12 +1905,32 @@ export default function LessonGradingPage() {
                         "Save Grade"
                       )}
                     </Button>
+                    {(viewSubmission?.grade !== null || viewSubmission?.review_status === "graded") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => viewSubmission && handleUngrade(viewSubmission.id)}
+                        disabled={savingGradeId === viewSubmission?.id}
+                        className="h-9 px-4 text-xs font-semibold border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50"
+                      >
+                        Ungrade
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Student Detail Drill-down */}
+        {detailStudent && (
+          <StudentDetailDialog
+            studentId={detailStudent.auth_user_id || detailStudent.id}
+            studentName={detailStudent.name || detailStudent.email || "Student"}
+            open={!!detailStudent}
+            onOpenChange={(open) => !open && setDetailStudent(null)}
+          />
+        )}
       </div>
     </LMSLayout>
   );

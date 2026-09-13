@@ -28,6 +28,7 @@ import {
   Clock
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { fetchUserDirectory } from "@/utils/studentDirectory";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -141,26 +142,7 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
       if (error) throw error;
 
       const studentIds = Array.from(new Set((data || []).map(p => p.student_id).filter(Boolean)));
-      let usersMap: Record<string, any> = {};
-      if (studentIds.length > 0) {
-        const { data: uData } = await supabase
-          .from('users')
-          .select('id, auth_user_id, name, first_name, last_name, email, phone, parent_phone, avatar_url')
-          .or(`id.in.(${studentIds.join(',')}),auth_user_id.in.(${studentIds.join(',')})`);
-
-        (uData || []).forEach(u => {
-          const fn = u.first_name?.trim() || "";
-          const ln = u.last_name?.trim() || "";
-          const fullName = [fn, ln].filter(Boolean).join(" ");
-          const parsed = {
-            ...u,
-            name: fullName || (u.name && u.name.trim()) || "",
-            phone: u.phone || u.parent_phone || "",
-          };
-          if (u.id) usersMap[u.id] = parsed;
-          if (u.auth_user_id) usersMap[u.auth_user_id] = parsed;
-        });
-      }
+      const usersMap = studentIds.length > 0 ? await fetchUserDirectory(studentIds) : {};
 
       const initialGrades: Record<string, string> = {};
       const initialFeedback: Record<string, string> = {};
