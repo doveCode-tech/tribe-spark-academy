@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -31,12 +32,17 @@ import {
   CheckCircle,
   Search,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Clock,
-  Send,
   Loader2,
   RefreshCw,
+  Sliders,
+  Award,
+  Sparkles,
+  Plus,
+  Trash2,
+  Save,
+  HelpCircle,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +50,7 @@ import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
 
 type StatusFilter = "no_filter" | "needs_grading" | "submitted" | "not_submitted";
+type PageTab = "assignment" | "settings" | "advanced_grading";
 
 interface SubmissionItem {
   id: string;
@@ -60,7 +67,6 @@ interface SubmissionItem {
   feedback: string | null;
   review_status: string | null;
   submitted_at: string | null;
-  // Resolved student info
   student?: {
     id: string;
     auth_user_id: string | null;
@@ -80,6 +86,13 @@ interface EnrolledStudent {
   avatar_url?: string | null;
 }
 
+interface RubricCriterion {
+  id: string;
+  name: string;
+  description: string;
+  maxPoints: number;
+}
+
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export default function LessonGradingPage() {
@@ -92,6 +105,9 @@ export default function LessonGradingPage() {
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Active Top Tab
+  const [activeTab, setActiveTab] = useState<PageTab>("assignment");
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("no_filter");
@@ -107,6 +123,31 @@ export default function LessonGradingPage() {
   // View Submission Modal state
   const [viewSubmission, setViewSubmission] = useState<SubmissionItem | null>(null);
   const [codeTab, setCodeTab] = useState<"code" | "preview">("code");
+
+  // ── Settings Tab State (Image 2) ───────────────────────────────────────────
+  const [settingTitle, setSettingTitle] = useState("");
+  const [settingDescription, setSettingDescription] = useState("");
+  const [settingInstructions, setSettingInstructions] = useState("");
+  const [enableDueDate, setEnableDueDate] = useState(false);
+  const [dueDate, setDueDate] = useState("");
+  const [enableCutoffDate, setEnableCutoffDate] = useState(false);
+  const [cutoffDate, setCutoffDate] = useState("");
+  const [allowOnlineCode, setAllowOnlineCode] = useState(true);
+  const [allowFileUpload, setAllowFileUpload] = useState(true);
+  const [allowExternalLink, setAllowExternalLink] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // ── Advanced Grading Tab State (Image 3) ───────────────────────────────────
+  const [gradingMethod, setGradingMethod] = useState<"simple" | "rubric" | "guide">("simple");
+  const [maxGrade, setMaxGrade] = useState("100");
+  const [passingGrade, setPassingGrade] = useState("70");
+  const [autoNotify, setAutoNotify] = useState(true);
+  const [rubricCriteria, setRubricCriteria] = useState<RubricCriterion[]>([
+    { id: "1", name: "Code Correctness & Functionality", description: "Does the code run properly without errors and meet requirements?", maxPoints: 40 },
+    { id: "2", name: "Design, Styling & Creativity", description: "Visual appearance, clean layout, color harmony, and creative effort.", maxPoints: 30 },
+    { id: "3", name: "Code Structure & Best Practices", description: "Proper indentation, semantic tags, comments, and clean logic.", maxPoints: 30 },
+  ]);
+  const [savingGradingConfig, setSavingGradingConfig] = useState(false);
 
   useEffect(() => {
     if (courseId && lessonId) {
@@ -133,31 +174,35 @@ export default function LessonGradingPage() {
         .maybeSingle();
       setLesson(lData);
 
+      // Initialize Settings from Lesson Data
+      if (lData) {
+        setSettingTitle(lData.title || "");
+        setSettingDescription(lData.description || "");
+        setSettingInstructions(lData.content || "");
+        const ex = lData.exercises || {};
+        if (ex.due_date) {
+          setDueDate(ex.due_date);
+          setEnableDueDate(true);
+        }
+        if (ex.cutoff_date) {
+          setCutoffDate(ex.cutoff_date);
+          setEnableCutoffDate(true);
+        }
+        if (ex.allow_code !== undefined) setAllowOnlineCode(ex.allow_code);
+        if (ex.allow_file !== undefined) setAllowFileUpload(ex.allow_file);
+        if (ex.allow_link !== undefined) setAllowExternalLink(ex.allow_link);
+        if (ex.grading_method) setGradingMethod(ex.grading_method);
+        if (ex.max_grade) setMaxGrade(ex.max_grade.toString());
+        if (ex.passing_grade) setPassingGrade(ex.passing_grade.toString());
+        if (ex.auto_notify !== undefined) setAutoNotify(ex.auto_notify);
+        if (ex.rubric && Array.isArray(ex.rubric)) setRubricCriteria(ex.rubric);
+      }
+
       // 3. Fetch Enrolled Students for this course
       const { data: enrollments } = await supabase
         .from("enrollments")
         .select("student_id")
         .eq("course_id", courseId!);
-
-      const studentIds = (enrollments || []).map((e) => e.student_id).filter(Boolean);
-      let studentList: EnrolledStudent[] = [];
-
-      if (studentIds.length > 0) {
-        const { data: uData } = await supabase
-          .from("users")
-          .select("id, auth_user_id, name, email, parent_phone, avatar_url")
-          .or(`id.in.(${studentIds.join(",")}),auth_user_id.in.(${studentIds.join(",")})`);
-
-        studentList = (uData || []).map((u) => ({
-          id: u.id,
-          auth_user_id: u.auth_user_id,
-          name: u.name || "Student",
-          email: u.email || "",
-          phone: u.parent_phone || null,
-          avatar_url: u.avatar_url || null,
-        }));
-        setEnrolledStudents(studentList);
-      }
 
       // 4. Fetch Submissions for this lesson
       const { data: pData, error: pErr } = await supabase
@@ -168,47 +213,84 @@ export default function LessonGradingPage() {
 
       if (pErr) throw pErr;
 
-      // Also lookup any students in projects that might not be in enrolledStudents map
-      const projStudentIds = Array.from(new Set((pData || []).map((p) => p.student_id).filter(Boolean)));
-      const missingIds = projStudentIds.filter(
-        (pid) => !studentList.some((s) => s.id === pid || s.auth_user_id === pid)
-      );
+      // Collect all student IDs across enrollments and submissions
+      const allStudentIdSet = new Set<string>();
+      (enrollments || []).forEach((e) => {
+        if (e.student_id) allStudentIdSet.add(e.student_id);
+      });
+      (pData || []).forEach((p) => {
+        if (p.student_id) allStudentIdSet.add(p.student_id);
+      });
+      const allUniqueIds = Array.from(allStudentIdSet);
 
-      let extraStudentsMap: Record<string, EnrolledStudent> = {};
-      if (missingIds.length > 0) {
-        const { data: extraUsers } = await supabase
+      // Query users table for all student records
+      const usersMap: Record<string, EnrolledStudent> = {};
+
+      if (allUniqueIds.length > 0) {
+        // Query by id
+        const { data: byId } = await supabase
           .from("users")
           .select("id, auth_user_id, name, email, parent_phone, avatar_url")
-          .or(`id.in.(${missingIds.join(",")}),auth_user_id.in.(${missingIds.join(",")})`);
+          .in("id", allUniqueIds);
 
-        (extraUsers || []).forEach((u) => {
+        // Query by auth_user_id
+        const { data: byAuth } = await supabase
+          .from("users")
+          .select("id, auth_user_id, name, email, parent_phone, avatar_url")
+          .in("auth_user_id", allUniqueIds);
+
+        const foundUsers = [...(byId || []), ...(byAuth || [])];
+        foundUsers.forEach((u) => {
           const item: EnrolledStudent = {
             id: u.id,
             auth_user_id: u.auth_user_id,
-            name: u.name || "Student",
+            name: u.name || (u.email ? u.email.split("@")[0] : "Student"),
             email: u.email || "",
             phone: u.parent_phone || null,
             avatar_url: u.avatar_url || null,
           };
-          if (u.id) extraStudentsMap[u.id] = item;
-          if (u.auth_user_id) extraStudentsMap[u.auth_user_id] = item;
+          if (u.id) usersMap[u.id] = item;
+          if (u.auth_user_id) usersMap[u.auth_user_id] = item;
         });
       }
 
-      // Merge student mapping into submissions
-      const allStudentMap: Record<string, EnrolledStudent> = { ...extraStudentsMap };
-      studentList.forEach((s) => {
-        if (s.id) allStudentMap[s.id] = s;
-        if (s.auth_user_id) allStudentMap[s.auth_user_id] = s;
-      });
+      // If any ID is still not found in usersMap, fallback search across users table
+      const stillMissing = allUniqueIds.filter((id) => !usersMap[id]);
+      if (stillMissing.length > 0) {
+        const { data: fallbackUsers } = await supabase
+          .from("users")
+          .select("id, auth_user_id, name, email, parent_phone, avatar_url")
+          .limit(200);
 
+        (fallbackUsers || []).forEach((u) => {
+          const item: EnrolledStudent = {
+            id: u.id,
+            auth_user_id: u.auth_user_id,
+            name: u.name || (u.email ? u.email.split("@")[0] : "Student"),
+            email: u.email || "",
+            phone: u.parent_phone || null,
+            avatar_url: u.avatar_url || null,
+          };
+          if (u.id) usersMap[u.id] = item;
+          if (u.auth_user_id) usersMap[u.auth_user_id] = item;
+        });
+      }
+
+      // Build enrolled student list
+      const studentList: EnrolledStudent[] = (enrollments || [])
+        .map((e) => usersMap[e.student_id])
+        .filter(Boolean);
+      setEnrolledStudents(studentList);
+
+      // Build enriched submissions list
       const initialGradingMap: Record<string, { grade: string; feedback: string }> = {};
       const enrichedSubmissions: SubmissionItem[] = (pData || []).map((p) => {
-        const studentInfo = allStudentMap[p.student_id] || {
+        const studentInfo = usersMap[p.student_id] || {
           id: p.student_id,
           auth_user_id: p.student_id,
           name: "Student",
           email: "",
+          phone: null,
         };
 
         initialGradingMap[p.id] = {
@@ -254,7 +336,7 @@ export default function LessonGradingPage() {
     );
   }, [enrolledStudents, submittedStudentIds]);
 
-  // Unified list depending on filter
+  // Unified list for table rows
   interface RowItem {
     key: string;
     isSubmitted: boolean;
@@ -365,7 +447,7 @@ export default function LessonGradingPage() {
       // Notify student
       const sub = submissions.find((s) => s.id === submissionId);
       const studentAuthId = sub?.student?.auth_user_id || sub?.student_id;
-      if (studentAuthId) {
+      if (studentAuthId && autoNotify) {
         createNotification({
           recipientUserId: studentAuthId,
           type: "project_graded",
@@ -397,7 +479,121 @@ export default function LessonGradingPage() {
     }
   };
 
-  // Download All Submissions (CSV or JSON summary)
+  // ── Save Settings Handler (Image 2) ─────────────────────────────────────────
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const updatedExercises = {
+        ...(lesson?.exercises || {}),
+        due_date: enableDueDate ? dueDate : null,
+        cutoff_date: enableCutoffDate ? cutoffDate : null,
+        allow_code: allowOnlineCode,
+        allow_file: allowFileUpload,
+        allow_link: allowExternalLink,
+      };
+
+      const { error } = await supabase
+        .from("lessons")
+        .update({
+          title: settingTitle,
+          description: settingDescription,
+          content: settingInstructions,
+          exercises: updatedExercises,
+        })
+        .eq("id", lessonId!);
+
+      if (error) throw error;
+
+      soundEffects.playSuccess();
+      toast({
+        title: "Assignment Settings Saved!",
+        description: "Your changes have been updated successfully.",
+      });
+
+      setLesson((prev: any) => ({
+        ...prev,
+        title: settingTitle,
+        description: settingDescription,
+        content: settingInstructions,
+        exercises: updatedExercises,
+      }));
+
+      // Switch back to view submissions
+      setActiveTab("assignment");
+    } catch (err: any) {
+      console.error("Save settings error:", err);
+      toast({ title: "Failed to save settings", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // ── Save Advanced Grading Handler (Image 3) ─────────────────────────────────
+  const handleSaveGradingConfig = async () => {
+    setSavingGradingConfig(true);
+    try {
+      const updatedExercises = {
+        ...(lesson?.exercises || {}),
+        grading_method: gradingMethod,
+        max_grade: parseInt(maxGrade, 10) || 100,
+        passing_grade: parseInt(passingGrade, 10) || 70,
+        auto_notify: autoNotify,
+        rubric: rubricCriteria,
+      };
+
+      const { error } = await supabase
+        .from("lessons")
+        .update({
+          exercises: updatedExercises,
+        })
+        .eq("id", lessonId!);
+
+      if (error) throw error;
+
+      soundEffects.playSuccess();
+      toast({
+        title: "Advanced Grading Saved!",
+        description: `Active grading method set to: ${
+          gradingMethod === "simple"
+            ? "Simple direct grading"
+            : gradingMethod === "rubric"
+            ? "Rubric"
+            : "Marking guide"
+        }.`,
+      });
+
+      setLesson((prev: any) => ({
+        ...prev,
+        exercises: updatedExercises,
+      }));
+    } catch (err: any) {
+      console.error("Save grading config error:", err);
+      toast({ title: "Failed to save configuration", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingGradingConfig(false);
+    }
+  };
+
+  // Rubric Criterion Helpers
+  const handleAddCriterion = () => {
+    const newId = Date.now().toString();
+    setRubricCriteria((prev) => [
+      ...prev,
+      { id: newId, name: "New Criterion", description: "Describe what is expected for this criterion.", maxPoints: 20 },
+    ]);
+  };
+
+  const handleUpdateCriterion = (id: string, field: keyof RubricCriterion, val: any) => {
+    setRubricCriteria((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: val } : c))
+    );
+  };
+
+  const handleDeleteCriterion = (id: string) => {
+    setRubricCriteria((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  // Download All Submissions CSV
   const handleDownloadAll = () => {
     if (submissions.length === 0) {
       toast({ title: "No submissions to download", variant: "destructive" });
@@ -405,10 +601,11 @@ export default function LessonGradingPage() {
     }
 
     const rows = [
-      ["Student Name", "Email", "Submission Title", "Submitted At", "Status", "Grade", "Link", "Has Code", "Feedback"],
+      ["Student Name", "Email", "Phone", "Submission Title", "Submitted At", "Status", "Grade", "Link", "Has Code", "Feedback"],
       ...submissions.map((s) => [
         `"${s.student?.name || "Student"}"`,
         `"${s.student?.email || ""}"`,
+        `"${s.student?.phone || ""}"`,
         `"${s.title || "Project"}"`,
         `"${s.submitted_at ? new Date(s.submitted_at).toLocaleString() : ""}"`,
         `"${s.review_status || "submitted"}"`,
@@ -450,49 +647,51 @@ export default function LessonGradingPage() {
 
   return (
     <LMSLayout>
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-16">
-        {/* ── 1. Top Forest Green Course Banner (Image 2 style) ────────────────────── */}
-        <div className="bg-[#1b4332] text-white py-4 px-6 shadow-md">
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 pb-16">
+        {/* ── 1. Top Purple & Lavender Course Banner ─────────────────────────────── */}
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-purple-900 text-white py-5 px-6 shadow-md border-b border-purple-800/40">
           <div className="max-w-7xl mx-auto flex flex-col items-center justify-center text-center">
-            <h1 className="text-xl md:text-2xl font-black tracking-wider uppercase drop-shadow-sm">
+            <h1 className="text-xl md:text-2xl font-black tracking-wider uppercase drop-shadow-sm text-purple-100">
               {course?.title || "COURSE MANAGEMENT"}
             </h1>
-            <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wider uppercase text-emerald-200 mt-1 flex-wrap justify-center">
-              <Link to="/" className="hover:underline text-emerald-100">DASHBOARD</Link>
+            <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wider uppercase text-purple-200 mt-1 flex-wrap justify-center">
+              <Link to="/" className="hover:underline text-purple-200">DASHBOARD</Link>
               <span>/</span>
-              <Link to="/courses" className="hover:underline text-emerald-100">MY COURSES</Link>
+              <Link to="/courses" className="hover:underline text-purple-200">MY COURSES</Link>
               <span>/</span>
-              <Link to={`/courses/${courseId}`} className="hover:underline text-emerald-100">
+              <Link to={`/courses/${courseId}`} className="hover:underline text-purple-200">
                 {course?.title || "COURSE"}
               </Link>
               <span>/</span>
-              <span className="text-white">
+              <span className="text-white font-bold">
                 {lesson?.title || `LESSON ${lesson?.order_index || 1}`}
               </span>
               <span>/</span>
-              <span className="bg-emerald-800/80 px-1.5 py-0.5 rounded text-white">GRADING</span>
+              <span className="bg-purple-800/90 text-purple-100 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">
+                {activeTab === "assignment" ? "GRADING" : activeTab === "settings" ? "SETTINGS" : "ADVANCED GRADING"}
+              </span>
             </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-4 space-y-4">
-          {/* ── 2. Assignment Section Header ─────────────────────────────────────── */}
-          <div className="bg-card border rounded-lg overflow-hidden shadow-sm">
+          {/* ── 2. Assignment Header Card with Purple & Lavender Palette ───────────── */}
+          <div className="bg-card border border-purple-100 dark:border-purple-950 rounded-lg overflow-hidden shadow-sm">
             <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-pink-500/15 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-11 h-11 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 flex items-center justify-center shrink-0 mt-0.5 border border-purple-200 dark:border-purple-800">
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300 px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
                       ASSIGNMENT
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground font-medium">
                       Lesson {lesson?.order_index || 1}
                     </span>
                   </div>
-                  <h2 className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
+                  <h2 className="text-lg sm:text-xl font-bold text-foreground mt-1">
                     {lesson?.title ? `${lesson.title} Graded Project` : "Lesson Graded Project"}
                   </h2>
                   {lesson?.description && (
@@ -509,7 +708,7 @@ export default function LessonGradingPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => navigate(-1)}
-                  className="gap-1.5 bg-background shadow-xs text-xs h-9"
+                  className="gap-1.5 bg-background shadow-xs text-xs h-9 border-purple-200 hover:bg-purple-50 text-purple-900 dark:text-purple-200"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   Back
@@ -518,7 +717,7 @@ export default function LessonGradingPage() {
                   variant="default"
                   size="sm"
                   onClick={handleDownloadAll}
-                  className="gap-1.5 bg-[#1b4332] hover:bg-[#143225] text-white shadow-xs text-xs h-9"
+                  className="gap-1.5 bg-purple-700 hover:bg-purple-800 text-white shadow-xs text-xs h-9 font-semibold"
                 >
                   <Download className="w-4 h-4" />
                   Download all submissions
@@ -526,404 +725,823 @@ export default function LessonGradingPage() {
               </div>
             </div>
 
-            {/* Sub-tabs bar */}
-            <div className="border-t bg-muted/40 px-4 flex items-center gap-2 text-xs font-semibold text-muted-foreground overflow-x-auto">
-              <button className="px-3 py-2.5 border-b-2 border-[#1b4332] text-[#1b4332] dark:text-emerald-400 bg-background/60">
-                Assignment
+            {/* ── Top Navigation Tabs (Assignment | Settings | Advanced grading) ── */}
+            <div className="border-t border-purple-100 dark:border-purple-950/60 bg-purple-50/40 dark:bg-purple-950/20 px-4 flex items-center gap-1 text-xs font-semibold overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("assignment")}
+                className={`px-4 py-3 border-b-2 font-bold transition-colors flex items-center gap-1.5 ${
+                  activeTab === "assignment"
+                    ? "border-purple-700 text-purple-800 dark:text-purple-300 bg-white dark:bg-zinc-900"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Assignment & Submissions
               </button>
-              <button className="px-3 py-2.5 hover:text-foreground">Settings</button>
-              <button className="px-3 py-2.5 hover:text-foreground">Advanced grading</button>
+              <button
+                onClick={() => setActiveTab("settings")}
+                className={`px-4 py-3 border-b-2 font-bold transition-colors flex items-center gap-1.5 ${
+                  activeTab === "settings"
+                    ? "border-purple-700 text-purple-800 dark:text-purple-300 bg-white dark:bg-zinc-900"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <SettingsIcon className="w-3.5 h-3.5" />
+                Settings
+              </button>
+              <button
+                onClick={() => setActiveTab("advanced_grading")}
+                className={`px-4 py-3 border-b-2 font-bold transition-colors flex items-center gap-1.5 ${
+                  activeTab === "advanced_grading"
+                    ? "border-purple-700 text-purple-800 dark:text-purple-300 bg-white dark:bg-zinc-900"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                Advanced grading
+              </button>
             </div>
           </div>
 
-          {/* ── 3. Submissions Control & Filter Bar ───────────────────────────────── */}
-          <div className="bg-card border rounded-lg p-4 sm:p-5 shadow-sm space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-xl font-extrabold tracking-tight text-foreground">
-                  Submissions
+          {/* ═══════════════════════════════════════════════════════════════════════
+              TAB 1: ASSIGNMENT & SUBMISSIONS TABLE (matching Image 1 & 2)
+          ═══════════════════════════════════════════════════════════════════════ */}
+          {activeTab === "assignment" && (
+            <>
+              {/* Filter controls & Summary bar */}
+              <div className="bg-card border border-purple-100 dark:border-purple-950 rounded-lg p-4 sm:p-5 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-extrabold tracking-tight text-foreground">
+                      Submissions
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="font-semibold text-purple-700 dark:text-purple-300">{submissions.length}</span> submitted ·{" "}
+                      <span className="font-semibold text-amber-600">
+                        {submissions.filter((s) => s.grade === null || s.review_status === "submitted").length}
+                      </span>{" "}
+                      need grading ·{" "}
+                      <span className="font-semibold text-muted-foreground">{unsubmittedStudents.length}</span> not submitted
+                    </p>
+                  </div>
+
+                  {/* Search and Filters */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Search box */}
+                    <div className="relative min-w-[200px]">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search student, email, phone..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-9 pl-8 text-xs bg-background border-purple-200 dark:border-purple-900"
+                      />
+                    </div>
+
+                    {/* Status Filter Dropdown */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                        Filter:
+                      </span>
+                      <Select
+                        value={statusFilter}
+                        onValueChange={(val: StatusFilter) => setStatusFilter(val)}
+                      >
+                        <SelectTrigger className="w-[180px] h-9 text-xs bg-background border-purple-200 dark:border-purple-900">
+                          <SelectValue placeholder="Select filter" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="no_filter">No filter (All)</SelectItem>
+                          <SelectItem value="needs_grading">Needs grading</SelectItem>
+                          <SelectItem value="submitted">Submitted</SelectItem>
+                          <SelectItem value="not_submitted">Not submitted</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={loadData}
+                      className="h-9 px-2 text-xs text-purple-800 dark:text-purple-300 hover:bg-purple-100/50"
+                      title="Refresh submissions"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Alphabet Index (First name & Last name A-Z from Image 2) */}
+                <div className="border-t border-purple-100 dark:border-purple-950 pt-3 space-y-2 text-xs">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="w-20 font-semibold text-muted-foreground text-[11px]">First name:</span>
+                    <button
+                      onClick={() => setFirstNameFilter("ALL")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        firstNameFilter === "ALL"
+                          ? "bg-purple-700 text-white font-bold"
+                          : "bg-purple-50 text-purple-900 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300"
+                      }`}
+                    >
+                      All
+                    </button>
+                    {alphabet.map((letter) => (
+                      <button
+                        key={`fn-${letter}`}
+                        onClick={() => setFirstNameFilter(letter)}
+                        className={`w-6 h-6 rounded text-[11px] font-medium transition-colors ${
+                          firstNameFilter === letter
+                            ? "bg-purple-700 text-white font-bold"
+                            : "bg-purple-50 hover:bg-purple-100 text-purple-900 dark:bg-purple-950/30 dark:text-purple-300"
+                        }`}
+                      >
+                        {letter}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="w-20 font-semibold text-muted-foreground text-[11px]">Last name:</span>
+                    <button
+                      onClick={() => setLastNameFilter("ALL")}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        lastNameFilter === "ALL"
+                          ? "bg-purple-700 text-white font-bold"
+                          : "bg-purple-50 text-purple-900 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300"
+                      }`}
+                    >
+                      All
+                    </button>
+                    {alphabet.map((letter) => (
+                      <button
+                        key={`ln-${letter}`}
+                        onClick={() => setLastNameFilter(letter)}
+                        className={`w-6 h-6 rounded text-[11px] font-medium transition-colors ${
+                          lastNameFilter === letter
+                            ? "bg-purple-700 text-white font-bold"
+                            : "bg-purple-50 hover:bg-purple-100 text-purple-900 dark:bg-purple-950/30 dark:text-purple-300"
+                        }`}
+                      >
+                        {letter}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Submissions Table (Deep Purple header) */}
+              <div className="bg-card border border-purple-100 dark:border-purple-950 rounded-lg shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-purple-900 text-white border-b border-purple-800 font-semibold text-[11px]">
+                        <th className="py-3 px-3 w-10 text-center">
+                          <Checkbox
+                            checked={selectedIds.length === tableRows.length && tableRows.length > 0}
+                            onCheckedChange={handleSelectAll}
+                            className="border-white data-[state=checked]:bg-white data-[state=checked]:text-purple-900"
+                          />
+                        </th>
+                        <th className="py-3 px-3 w-12">User picture</th>
+                        <th className="py-3 px-4 font-bold">First name / Last name</th>
+                        <th className="py-3 px-4">Username / Email</th>
+                        <th className="py-3 px-3 hidden lg:table-cell">Phone</th>
+                        <th className="py-3 px-3">Status</th>
+                        <th className="py-3 px-4 min-w-[160px]">Grade</th>
+                        <th className="py-3 px-4 hidden md:table-cell">Last modified (submission)</th>
+                        <th className="py-3 px-4 min-w-[200px]">Online text / Submission</th>
+                        <th className="py-3 px-4 min-w-[180px]">Feedback</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-purple-100/60 dark:divide-purple-950/60">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={10} className="py-16 text-center text-muted-foreground">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-purple-600" />
+                            Loading submissions and student data...
+                          </td>
+                        </tr>
+                      ) : tableRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="py-16 text-center text-muted-foreground">
+                            <FileText className="w-10 h-10 mx-auto mb-2 opacity-30 text-purple-400" />
+                            <p className="font-semibold text-foreground">No students match current filter.</p>
+                            <p className="text-xs text-muted-foreground mt-1">Try selecting "No filter (All)" or clear search.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        tableRows.map((row) => {
+                          const isSub = row.isSubmitted && row.submission;
+                          const sub = row.submission;
+                          const st = row.student;
+                          const vals = isSub && sub ? gradingValues[sub.id] || { grade: "", feedback: "" } : { grade: "", feedback: "" };
+
+                          return (
+                            <tr
+                              key={row.key}
+                              className={`hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors ${
+                                !row.isSubmitted ? "bg-muted/10 opacity-75" : ""
+                              }`}
+                            >
+                              {/* Checkbox */}
+                              <td className="py-3.5 px-3 text-center">
+                                <Checkbox
+                                  checked={selectedIds.includes(row.key)}
+                                  onCheckedChange={() => toggleSelectRow(row.key)}
+                                />
+                              </td>
+
+                              {/* User picture */}
+                              <td className="py-3.5 px-3">
+                                <Avatar className="w-8 h-8 rounded-full border border-purple-200 shadow-xs">
+                                  {st.avatar_url && <AvatarImage src={st.avatar_url} alt={st.name || "Student"} />}
+                                  <AvatarFallback className="bg-purple-100 text-purple-900 font-bold text-[10px]">
+                                    {(st.name || "S").slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                              </td>
+
+                              {/* Student Name */}
+                              <td className="py-3.5 px-4 font-bold text-foreground">
+                                {st.name || "Student"}
+                              </td>
+
+                              {/* Email / Username */}
+                              <td className="py-3.5 px-4 text-muted-foreground font-medium">
+                                {st.email || "—"}
+                              </td>
+
+                              {/* Phone */}
+                              <td className="py-3.5 px-3 text-muted-foreground hidden lg:table-cell">
+                                {st.phone || "—"}
+                              </td>
+
+                              {/* Status Badge */}
+                              <td className="py-3.5 px-3">
+                                {row.isSubmitted && sub ? (
+                                  sub.grade !== null || sub.review_status === "graded" ? (
+                                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[10px] px-2 py-0.5">
+                                      Graded ({sub.grade}%)
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-medium text-[10px] px-2 py-0.5">
+                                      Submitted for grading
+                                    </Badge>
+                                  )
+                                ) : (
+                                  <Badge variant="outline" className="text-muted-foreground text-[10px] px-2 py-0.5">
+                                    Not submitted
+                                  </Badge>
+                                )}
+                              </td>
+
+                              {/* Grade Column */}
+                              <td className="py-3.5 px-4">
+                                {row.isSubmitted && sub ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      value={vals.grade}
+                                      onChange={(e) =>
+                                        setGradingValues((prev) => ({
+                                          ...prev,
+                                          [sub.id]: {
+                                            ...vals,
+                                            grade: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                      className="w-14 h-8 text-center text-xs font-semibold bg-background p-1 border-purple-200"
+                                      placeholder="—"
+                                    />
+                                    <span className="text-muted-foreground text-[11px] font-medium">/ 100</span>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleSaveGrade(sub.id)}
+                                      disabled={savingGradeId === sub.id}
+                                      className="h-8 px-2.5 text-xs bg-purple-700 hover:bg-purple-800 text-white font-semibold"
+                                    >
+                                      {savingGradeId === sub.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        "Grade"
+                                      )}
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground italic text-[11px]">—</span>
+                                )}
+                              </td>
+
+                              {/* Last modified date */}
+                              <td className="py-3.5 px-4 text-muted-foreground hidden md:table-cell text-[11px]">
+                                {sub?.submitted_at
+                                  ? new Date(sub.submitted_at).toLocaleString([], {
+                                      weekday: "short",
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "—"}
+                              </td>
+
+                              {/* Online text / Submission */}
+                              <td className="py-3.5 px-4">
+                                {row.isSubmitted && sub ? (
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {/* View Submission Button */}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setViewSubmission(sub)}
+                                        className="h-7 text-xs px-2 gap-1 border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        View Submission
+                                      </Button>
+
+                                      {/* External Link */}
+                                      {sub.link && (
+                                        <a
+                                          href={sub.link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-purple-700 dark:text-purple-400 font-bold hover:underline text-xs"
+                                          title={sub.link}
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                          Student project
+                                        </a>
+                                      )}
+
+                                      {/* File link */}
+                                      {sub.file_path && (
+                                        <a
+                                          href={
+                                            supabase.storage
+                                              .from("project-submissions")
+                                              .getPublicUrl(sub.file_path).data.publicUrl
+                                          }
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold underline text-xs"
+                                        >
+                                          <FileText className="w-3 h-3" />
+                                          File attachment
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    {sub.title && (
+                                      <div className="text-[11px] text-muted-foreground truncate max-w-[220px]">
+                                        Title: <span className="text-foreground">{sub.title}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-[11px]">No submission yet</span>
+                                )}
+                              </td>
+
+                              {/* Feedback text input */}
+                              <td className="py-3.5 px-4">
+                                {row.isSubmitted && sub ? (
+                                  <Input
+                                    value={vals.feedback}
+                                    onChange={(e) =>
+                                      setGradingValues((prev) => ({
+                                        ...prev,
+                                        [sub.id]: {
+                                          ...vals,
+                                          feedback: e.target.value,
+                                        },
+                                      }))
+                                    }
+                                    onBlur={() => {
+                                      if (sub.grade !== null && vals.feedback !== sub.feedback) {
+                                        handleSaveGrade(sub.id);
+                                      }
+                                    }}
+                                    placeholder="Add tutor feedback..."
+                                    className="h-8 text-xs bg-background border-purple-200"
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground italic text-[11px]">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════════════
+              TAB 2: SETTINGS (Essential & Working features from Image 2)
+          ═══════════════════════════════════════════════════════════════════════ */}
+          {activeTab === "settings" && (
+            <div className="bg-card border border-purple-100 dark:border-purple-950 rounded-lg p-6 shadow-sm space-y-6">
+              <div className="border-b border-purple-100 dark:border-purple-900/50 pb-4">
+                <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <SettingsIcon className="w-5 h-5 text-purple-700" />
+                  Updating Assignment: {lesson?.title || "Lesson Graded Project"}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  <span className="font-semibold text-foreground">{submissions.length}</span> submitted ·{" "}
-                  <span className="font-semibold text-amber-600">
-                    {submissions.filter((s) => s.grade === null || s.review_status === "submitted").length}
-                  </span>{" "}
-                  need grading ·{" "}
-                  <span className="font-semibold text-muted-foreground">{unsubmittedStudents.length}</span> not submitted
+                  Configure assignment parameters, deadline dates, and accepted submission methods.
                 </p>
               </div>
 
-              {/* Filter controls */}
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Search query input */}
-                <div className="relative min-w-[200px]">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-                  <Input
-                    placeholder="Search students..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-9 pl-8 text-xs bg-background"
-                  />
-                </div>
+              {/* Section 1: General Details */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                  General
+                </h4>
 
-                {/* Status Filter Dropdown (Explicitly requested by user) */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                    Filter:
-                  </span>
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(val: StatusFilter) => setStatusFilter(val)}
-                  >
-                    <SelectTrigger className="w-[180px] h-9 text-xs bg-background">
-                      <SelectValue placeholder="Select filter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="no_filter">No filter (All)</SelectItem>
-                      <SelectItem value="needs_grading">Needs grading</SelectItem>
-                      <SelectItem value="submitted">Submitted</SelectItem>
-                      <SelectItem value="not_submitted">Not submitted</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <div className="space-y-3 pl-4 border-l-2 border-purple-200 dark:border-purple-900">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Assignment Name <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      value={settingTitle}
+                      onChange={(e) => setSettingTitle(e.target.value)}
+                      placeholder="e.g. Lesson 2 Graded Project - Web Design"
+                      className="text-xs border-purple-200"
+                    />
+                  </div>
 
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Description & Overview
+                    </label>
+                    <Textarea
+                      value={settingDescription}
+                      onChange={(e) => setSettingDescription(e.target.value)}
+                      placeholder="Explain what the students are building and what is required to pass..."
+                      rows={3}
+                      className="text-xs border-purple-200 leading-relaxed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Activity Instructions & Guidance
+                    </label>
+                    <Textarea
+                      value={settingInstructions}
+                      onChange={(e) => setSettingInstructions(e.target.value)}
+                      placeholder="Step-by-step instructions or coding prompts for students..."
+                      rows={4}
+                      className="text-xs border-purple-200 leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Availability & Deadlines */}
+              <div className="space-y-4 pt-2">
+                <h4 className="text-sm font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                  Availability
+                </h4>
+
+                <div className="space-y-4 pl-4 border-l-2 border-purple-200 dark:border-purple-900">
+                  {/* Due Date */}
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-purple-100 bg-purple-50/30 dark:bg-purple-950/20 max-w-xl">
+                    <div className="space-y-0.5">
+                      <label className="text-xs font-semibold text-foreground block">
+                        Due Date
+                      </label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Students can submit after this date but it will be flagged as late.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={enableDueDate}
+                        onCheckedChange={(c) => setEnableDueDate(!!c)}
+                        id="enable-due"
+                      />
+                      <label htmlFor="enable-due" className="text-xs font-medium mr-2">Enable</label>
+                      <Input
+                        type="date"
+                        value={dueDate}
+                        disabled={!enableDueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="h-8 text-xs w-36 bg-background border-purple-200"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cutoff Date */}
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-lg border border-purple-100 bg-purple-50/30 dark:bg-purple-950/20 max-w-xl">
+                    <div className="space-y-0.5">
+                      <label className="text-xs font-semibold text-foreground block">
+                        Cut-off Date
+                      </label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Submissions will be completely closed after this date.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={enableCutoffDate}
+                        onCheckedChange={(c) => setEnableCutoffDate(!!c)}
+                        id="enable-cutoff"
+                      />
+                      <label htmlFor="enable-cutoff" className="text-xs font-medium mr-2">Enable</label>
+                      <Input
+                        type="date"
+                        value={cutoffDate}
+                        disabled={!enableCutoffDate}
+                        onChange={(e) => setCutoffDate(e.target.value)}
+                        className="h-8 text-xs w-36 bg-background border-purple-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Submission Types */}
+              <div className="space-y-4 pt-2">
+                <h4 className="text-sm font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                  Submission Types
+                </h4>
+
+                <div className="space-y-3 pl-4 border-l-2 border-purple-200 dark:border-purple-900 max-w-xl">
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-purple-100 bg-card">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground block">Online Code Editor</span>
+                      <span className="text-[11px] text-muted-foreground">Allows HTML, CSS, JS, or Python code submissions directly</span>
+                    </div>
+                    <Switch checked={allowOnlineCode} onCheckedChange={setAllowOnlineCode} />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-purple-100 bg-card">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground block">File Uploads</span>
+                      <span className="text-[11px] text-muted-foreground">Allows zip archives, documents, or project screenshots</span>
+                    </div>
+                    <Switch checked={allowFileUpload} onCheckedChange={setAllowFileUpload} />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-purple-100 bg-card">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground block">External Project Links</span>
+                      <span className="text-[11px] text-muted-foreground">Allows Scratch URLs, Roblox game links, or GitHub repositories</span>
+                    </div>
+                    <Switch checked={allowExternalLink} onCheckedChange={setAllowExternalLink} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="pt-4 border-t border-purple-100 flex items-center gap-3">
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={loadData}
-                  className="h-9 px-2 text-xs"
-                  title="Refresh submissions"
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold gap-2 px-6 h-10 shadow-xs"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                  {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save and Display Assignment
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setActiveTab("assignment")}
+                  className="text-xs h-10 border-purple-200"
+                >
+                  Cancel
                 </Button>
               </div>
             </div>
+          )}
 
-            {/* ── 4. Alphabet Index (First name & Last name A-Z from Image 2) ────── */}
-            <div className="border-t pt-3 space-y-2 text-xs">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="w-20 font-semibold text-muted-foreground text-[11px]">First name:</span>
-                <button
-                  onClick={() => setFirstNameFilter("ALL")}
-                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                    firstNameFilter === "ALL"
-                      ? "bg-[#1b4332] text-white"
-                      : "bg-muted/70 hover:bg-muted text-foreground"
-                  }`}
-                >
-                  All
-                </button>
-                {alphabet.map((letter) => (
-                  <button
-                    key={`fn-${letter}`}
-                    onClick={() => setFirstNameFilter(letter)}
-                    className={`w-6 h-6 rounded text-[11px] font-medium transition-colors ${
-                      firstNameFilter === letter
-                        ? "bg-[#1b4332] text-white font-bold"
-                        : "bg-muted/50 hover:bg-muted text-foreground"
-                    }`}
+          {/* ═══════════════════════════════════════════════════════════════════════
+              TAB 3: ADVANCED GRADING (Matching Image 3)
+          ═══════════════════════════════════════════════════════════════════════ */}
+          {activeTab === "advanced_grading" && (
+            <div className="bg-card border border-purple-100 dark:border-purple-950 rounded-lg p-6 shadow-sm space-y-6">
+              <div className="border-b border-purple-100 dark:border-purple-900/50 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                    <Award className="w-5 h-5 text-purple-700" />
+                    Advanced grading
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Define active grading methodologies, passing cutoffs, and evaluation rubrics.
+                  </p>
+                </div>
+
+                {/* Grading Method Selector (Image 3 dropdown) */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                    Change active grading method to:
+                  </span>
+                  <Select
+                    value={gradingMethod}
+                    onValueChange={(v: "simple" | "rubric" | "guide") => setGradingMethod(v)}
                   >
-                    {letter}
-                  </button>
-                ))}
+                    <SelectTrigger className="w-[200px] h-9 text-xs bg-background border-purple-300 font-semibold text-purple-900 dark:text-purple-200">
+                      <SelectValue placeholder="Select grading method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="simple">Simple direct grading</SelectItem>
+                      <SelectItem value="rubric">Rubric</SelectItem>
+                      <SelectItem value="guide">Marking guide</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="w-20 font-semibold text-muted-foreground text-[11px]">Last name:</span>
-                <button
-                  onClick={() => setLastNameFilter("ALL")}
-                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                    lastNameFilter === "ALL"
-                      ? "bg-[#1b4332] text-white"
-                      : "bg-muted/70 hover:bg-muted text-foreground"
-                  }`}
-                >
-                  All
-                </button>
-                {alphabet.map((letter) => (
-                  <button
-                    key={`ln-${letter}`}
-                    onClick={() => setLastNameFilter(letter)}
-                    className={`w-6 h-6 rounded text-[11px] font-medium transition-colors ${
-                      lastNameFilter === letter
-                        ? "bg-[#1b4332] text-white font-bold"
-                        : "bg-muted/50 hover:bg-muted text-foreground"
-                    }`}
-                  >
-                    {letter}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+              {/* ── Method 1: Simple Direct Grading ── */}
+              {gradingMethod === "simple" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 text-xs space-y-2">
+                    <span className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5 text-sm">
+                      <CheckCircle className="w-4 h-4 text-purple-600" />
+                      Simple Direct Grading is Active
+                    </span>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Tutors directly assign a numeric score between 0 and {maxGrade} along with qualitative written feedback for each student submission.
+                    </p>
+                  </div>
 
-          {/* ── 5. Main Submissions & Grading Table (matching Image 2) ───────────── */}
-          <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#1b4332] text-white border-b font-semibold text-[11px]">
-                    <th className="py-3 px-3 w-10 text-center">
-                      <Checkbox
-                        checked={selectedIds.length === tableRows.length && tableRows.length > 0}
-                        onCheckedChange={handleSelectAll}
-                        className="border-white data-[state=checked]:bg-white data-[state=checked]:text-[#1b4332]"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-foreground block">
+                        Maximum Grade Points
+                      </label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={maxGrade}
+                        onChange={(e) => setMaxGrade(e.target.value)}
+                        className="text-xs border-purple-200 h-9"
                       />
-                    </th>
-                    <th className="py-3 px-3 w-12">User picture</th>
-                    <th className="py-3 px-4 font-bold">First name / Last name</th>
-                    <th className="py-3 px-4">Username / Email</th>
-                    <th className="py-3 px-3 hidden lg:table-cell">Phone</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-4 min-w-[160px]">Grade</th>
-                    <th className="py-3 px-4 hidden md:table-cell">Last modified (submission)</th>
-                    <th className="py-3 px-4 min-w-[200px]">Online text / Submission</th>
-                    <th className="py-3 px-4 min-w-[180px]">Feedback</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={10} className="py-16 text-center text-muted-foreground">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
-                        Loading submissions and enrolled students...
-                      </td>
-                    </tr>
-                  ) : tableRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="py-16 text-center text-muted-foreground">
-                        <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                        <p className="font-semibold text-foreground">No students match current filter.</p>
-                        <p className="text-xs text-muted-foreground mt-1">Try selecting "No filter (All)" or clear the search.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    tableRows.map((row) => {
-                      const isSub = row.isSubmitted && row.submission;
-                      const sub = row.submission;
-                      const st = row.student;
-                      const vals = isSub && sub ? gradingValues[sub.id] || { grade: "", feedback: "" } : { grade: "", feedback: "" };
+                    </div>
 
-                      return (
-                        <tr
-                          key={row.key}
-                          className={`hover:bg-muted/30 transition-colors ${
-                            !row.isSubmitted ? "bg-muted/10 opacity-75" : ""
-                          }`}
-                        >
-                          {/* Checkbox */}
-                          <td className="py-3.5 px-3 text-center">
-                            <Checkbox
-                              checked={selectedIds.includes(row.key)}
-                              onCheckedChange={() => toggleSelectRow(row.key)}
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-foreground block">
+                        Passing Grade Cutoff (%)
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={passingGrade}
+                        onChange={(e) => setPassingGrade(e.target.value)}
+                        className="text-xs border-purple-200 h-9"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3.5 rounded-lg border border-purple-100 max-w-xl">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-foreground block">Auto-notify student upon grading</span>
+                      <span className="text-[11px] text-muted-foreground">Sends an in-app chime notification whenever a grade is posted</span>
+                    </div>
+                    <Switch checked={autoNotify} onCheckedChange={setAutoNotify} />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Method 2: Rubric Builder ── */}
+              {gradingMethod === "rubric" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground">Rubric Evaluation Criteria</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Define weighted assessment criteria with max points for each dimension.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleAddCriterion}
+                      className="bg-purple-700 hover:bg-purple-800 text-white text-xs gap-1.5 h-8 font-semibold"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Criterion
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {rubricCriteria.map((c, idx) => (
+                      <div
+                        key={c.id}
+                        className="p-4 rounded-lg border border-purple-200 dark:border-purple-900 bg-card space-y-3 shadow-xs"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-bold text-purple-900 dark:text-purple-300">
+                            Criterion #{idx + 1}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-muted-foreground">Max Points:</span>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={c.maxPoints}
+                              onChange={(e) => handleUpdateCriterion(c.id, "maxPoints", parseInt(e.target.value, 10) || 0)}
+                              className="w-16 h-8 text-xs font-bold text-center border-purple-200"
                             />
-                          </td>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteCriterion(c.id)}
+                              className="text-red-500 hover:bg-red-50 h-8 w-8 p-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
 
-                          {/* User picture */}
-                          <td className="py-3.5 px-3">
-                            <Avatar className="w-8 h-8 rounded-full border shadow-xs">
-                              {st.avatar_url && <AvatarImage src={st.avatar_url} alt={st.name || "Student"} />}
-                              <AvatarFallback className="bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                                {(st.name || "S").slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                          </td>
+                        <Input
+                          value={c.name}
+                          onChange={(e) => handleUpdateCriterion(c.id, "name", e.target.value)}
+                          placeholder="Criterion Name (e.g. Code Correctness)"
+                          className="text-xs font-semibold border-purple-200"
+                        />
 
-                          {/* Student Name */}
-                          <td className="py-3.5 px-4 font-semibold text-foreground">
-                            {st.name || "Student"}
-                          </td>
+                        <Textarea
+                          value={c.description}
+                          onChange={(e) => handleUpdateCriterion(c.id, "description", e.target.value)}
+                          placeholder="Criterion description / performance expectations..."
+                          rows={2}
+                          className="text-xs border-purple-200"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                          {/* Email / Username */}
-                          <td className="py-3.5 px-4 text-muted-foreground">
-                            {st.email || "—"}
-                          </td>
+              {/* ── Method 3: Marking Guide ── */}
+              {gradingMethod === "guide" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 text-xs space-y-2">
+                    <span className="font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5 text-sm">
+                      <Award className="w-4 h-4 text-purple-600" />
+                      Marking Guide Configuration
+                    </span>
+                    <p className="text-muted-foreground leading-relaxed">
+                      A marking guide provides descriptive benchmarks and recommended grade allocations for each learning outcome.
+                    </p>
+                  </div>
 
-                          {/* Phone */}
-                          <td className="py-3.5 px-3 text-muted-foreground hidden lg:table-cell">
-                            {st.phone || "—"}
-                          </td>
+                  <div className="space-y-3 max-w-xl">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-foreground block">
+                        General Marker Guidance & Instructions
+                      </label>
+                      <Textarea
+                        placeholder="Instructions for tutors reviewing this lesson's submissions..."
+                        rows={3}
+                        className="text-xs border-purple-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                          {/* Status Badge */}
-                          <td className="py-3.5 px-3">
-                            {row.isSubmitted && sub ? (
-                              sub.grade !== null || sub.review_status === "graded" ? (
-                                <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[10px] px-2 py-0.5">
-                                  Graded ({sub.grade}%)
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-medium text-[10px] px-2 py-0.5">
-                                  Submitted for grading
-                                </Badge>
-                              )
-                            ) : (
-                              <Badge variant="outline" className="text-muted-foreground text-[10px] px-2 py-0.5">
-                                Not submitted
-                              </Badge>
-                            )}
-                          </td>
-
-                          {/* Grade Column (Image 2 style with input + / 100 + Grade button) */}
-                          <td className="py-3.5 px-4">
-                            {row.isSubmitted && sub ? (
-                              <div className="flex items-center gap-1.5">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  value={vals.grade}
-                                  onChange={(e) =>
-                                    setGradingValues((prev) => ({
-                                      ...prev,
-                                      [sub.id]: {
-                                        ...vals,
-                                        grade: e.target.value,
-                                      },
-                                    }))
-                                  }
-                                  className="w-14 h-8 text-center text-xs font-semibold bg-background p-1"
-                                  placeholder="—"
-                                />
-                                <span className="text-muted-foreground text-[11px] font-medium">/ 100</span>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSaveGrade(sub.id)}
-                                  disabled={savingGradeId === sub.id}
-                                  className="h-8 px-2.5 text-xs bg-[#1b4332] hover:bg-[#143225] text-white font-semibold"
-                                >
-                                  {savingGradeId === sub.id ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  ) : (
-                                    "Grade"
-                                  )}
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground italic text-[11px]">—</span>
-                            )}
-                          </td>
-
-                          {/* Last modified date */}
-                          <td className="py-3.5 px-4 text-muted-foreground hidden md:table-cell text-[11px]">
-                            {sub?.submitted_at
-                              ? new Date(sub.submitted_at).toLocaleString([], {
-                                  weekday: "short",
-                                  year: "numeric",
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "—"}
-                          </td>
-
-                          {/* Online text / Submission: Link, Code, and View Submission button */}
-                          <td className="py-3.5 px-4">
-                            {row.isSubmitted && sub ? (
-                              <div className="space-y-1.5">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {/* View Submission Button */}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setViewSubmission(sub)}
-                                    className="h-7 text-xs px-2 gap-1 border-primary/40 text-primary hover:bg-primary/10"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    View Submission
-                                  </Button>
-
-                                  {/* External Link (if student pasted a project URL) */}
-                                  {sub.link && (
-                                    <a
-                                      href={sub.link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 font-semibold underline text-xs"
-                                      title={sub.link}
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                      Student project
-                                    </a>
-                                  )}
-
-                                  {/* File link (if student uploaded a file) */}
-                                  {sub.file_path && (
-                                    <a
-                                      href={
-                                        supabase.storage
-                                          .from("project-submissions")
-                                          .getPublicUrl(sub.file_path).data.publicUrl
-                                      }
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-semibold underline text-xs"
-                                    >
-                                      <FileText className="w-3 h-3" />
-                                      File attachment
-                                    </a>
-                                  )}
-                                </div>
-
-                                {sub.title && (
-                                  <div className="text-[11px] text-muted-foreground truncate max-w-[220px]">
-                                    Title: <span className="text-foreground">{sub.title}</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground text-[11px]">No submission yet</span>
-                            )}
-                          </td>
-
-                          {/* Feedback text input or display */}
-                          <td className="py-3.5 px-4">
-                            {row.isSubmitted && sub ? (
-                              <Input
-                                value={vals.feedback}
-                                onChange={(e) =>
-                                  setGradingValues((prev) => ({
-                                    ...prev,
-                                    [sub.id]: {
-                                      ...vals,
-                                      feedback: e.target.value,
-                                    },
-                                  }))
-                                }
-                                onBlur={() => {
-                                  // Auto-save feedback if grade already set
-                                  if (sub.grade !== null && vals.feedback !== sub.feedback) {
-                                    handleSaveGrade(sub.id);
-                                  }
-                                }}
-                                placeholder="Add tutor feedback..."
-                                className="h-8 text-xs bg-background"
-                              />
-                            ) : (
-                              <span className="text-muted-foreground italic text-[11px]">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+              {/* Save Button */}
+              <div className="pt-4 border-t border-purple-100 flex items-center gap-3">
+                <Button
+                  onClick={handleSaveGradingConfig}
+                  disabled={savingGradingConfig}
+                  className="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold gap-2 px-6 h-10 shadow-xs"
+                >
+                  {savingGradingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Advanced Grading Configuration
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* ── 6. Full "View Submission" Modal ────────────────────────────────────── */}
+        {/* ── 4. Full "View Submission" Modal ────────────────────────────────────── */}
         <Dialog open={!!viewSubmission} onOpenChange={(open) => !open && setViewSubmission(null)}>
-          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-            <DialogHeader className="p-5 border-b bg-muted/20">
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-purple-200">
+            <DialogHeader className="p-5 border-b bg-gradient-to-r from-purple-900 via-indigo-950 to-purple-900 text-white">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-[#1b4332]" />
+                  <DialogTitle className="text-lg font-bold flex items-center gap-2 text-white">
+                    <Eye className="w-5 h-5 text-purple-200" />
                     Submission Details: {viewSubmission?.student?.name || "Student"}
                   </DialogTitle>
-                  <DialogDescription className="text-xs mt-1">
+                  <DialogDescription className="text-xs mt-1 text-purple-200">
                     {lesson?.title || "Lesson"} · Submitted on{" "}
                     {viewSubmission?.submitted_at
                       ? new Date(viewSubmission.submitted_at).toLocaleString()
@@ -944,23 +1562,29 @@ export default function LessonGradingPage() {
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* Submission Title and Student Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-muted/40 p-4 rounded-lg text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100 p-4 rounded-lg text-xs">
                 <div>
-                  <span className="text-muted-foreground block">Project Title:</span>
-                  <span className="font-semibold text-sm text-foreground">
-                    {viewSubmission?.title || "Activity Project"}
+                  <span className="text-muted-foreground block font-medium">Student Name:</span>
+                  <span className="font-bold text-sm text-foreground">
+                    {viewSubmission?.student?.name || "Student"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block">Student Contact:</span>
-                  <span className="font-medium text-foreground">
+                  <span className="text-muted-foreground block font-medium">Student Contact:</span>
+                  <span className="font-semibold text-foreground">
                     {viewSubmission?.student?.email || "No email"}
-                    {viewSubmission?.student?.phone ? ` · ${viewSubmission.student.phone}` : ""}
+                    {viewSubmission?.student?.phone ? ` · Tel: ${viewSubmission.student.phone}` : ""}
+                  </span>
+                </div>
+                <div className="col-span-full">
+                  <span className="text-muted-foreground block font-medium">Project Title:</span>
+                  <span className="font-bold text-foreground">
+                    {viewSubmission?.title || "Activity Project"}
                   </span>
                 </div>
                 {viewSubmission?.description && (
                   <div className="col-span-full">
-                    <span className="text-muted-foreground block">Description / Student Notes:</span>
+                    <span className="text-muted-foreground block font-medium">Student Description / Notes:</span>
                     <p className="mt-0.5 text-foreground leading-relaxed">
                       {viewSubmission.description}
                     </p>
@@ -968,23 +1592,23 @@ export default function LessonGradingPage() {
                 )}
               </div>
 
-              {/* External Link Block (if student provided URL) */}
+              {/* External Link Block */}
               {viewSubmission?.link && (
-                <div className="p-4 border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg flex items-center justify-between gap-3">
+                <div className="p-4 border border-purple-200 bg-purple-50/50 dark:bg-purple-950/20 rounded-lg flex items-center justify-between gap-3">
                   <div>
-                    <span className="text-xs font-semibold text-blue-900 dark:text-blue-200 block">
+                    <span className="text-xs font-semibold text-purple-900 dark:text-purple-200 block">
                       External Project Link
                     </span>
                     <a
                       href={viewSubmission.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-700 dark:text-blue-300 underline font-mono break-all"
+                      className="text-xs text-purple-700 dark:text-purple-300 underline font-mono break-all font-semibold"
                     >
                       {viewSubmission.link}
                     </a>
                   </div>
-                  <Button size="sm" asChild className="gap-1.5 shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                  <Button size="sm" asChild className="gap-1.5 shrink-0 bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold">
                     <a href={viewSubmission.link} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="w-3.5 h-3.5" />
                       Open Project ↗
@@ -995,16 +1619,16 @@ export default function LessonGradingPage() {
 
               {/* Uploaded File Block */}
               {viewSubmission?.file_path && (
-                <div className="p-4 border border-purple-200 bg-purple-50/50 dark:bg-purple-950/20 rounded-lg flex items-center justify-between gap-3">
+                <div className="p-4 border border-indigo-200 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-lg flex items-center justify-between gap-3">
                   <div>
-                    <span className="text-xs font-semibold text-purple-900 dark:text-purple-200 block">
+                    <span className="text-xs font-semibold text-indigo-900 dark:text-indigo-200 block">
                       Uploaded File Submission
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       {viewSubmission.file_path}
                     </span>
                   </div>
-                  <Button size="sm" asChild variant="outline" className="gap-1.5 shrink-0 text-xs">
+                  <Button size="sm" asChild variant="outline" className="gap-1.5 shrink-0 text-xs border-indigo-300 text-indigo-700">
                     <a
                       href={
                         supabase.storage
@@ -1023,10 +1647,10 @@ export default function LessonGradingPage() {
 
               {/* Code Content & Live Preview */}
               {viewSubmission?.code_content && (
-                <div className="border rounded-lg overflow-hidden space-y-0">
-                  <div className="bg-muted/70 px-4 py-2 flex items-center justify-between border-b">
+                <div className="border border-purple-200 rounded-lg overflow-hidden space-y-0">
+                  <div className="bg-purple-50 dark:bg-purple-950/50 px-4 py-2 flex items-center justify-between border-b border-purple-200">
                     <div className="flex items-center gap-2">
-                      <Code2 className="w-4 h-4 text-primary" />
+                      <Code2 className="w-4 h-4 text-purple-700 dark:text-purple-300" />
                       <span className="text-xs font-bold text-foreground uppercase tracking-wider">
                         Submitted Code ({viewSubmission.editor_type || "code"})
                       </span>
@@ -1036,7 +1660,7 @@ export default function LessonGradingPage() {
                         size="sm"
                         variant={codeTab === "code" ? "default" : "ghost"}
                         onClick={() => setCodeTab("code")}
-                        className="h-7 text-xs px-2.5"
+                        className={`h-7 text-xs px-2.5 ${codeTab === "code" ? "bg-purple-700 text-white" : ""}`}
                       >
                         Code
                       </Button>
@@ -1044,7 +1668,7 @@ export default function LessonGradingPage() {
                         size="sm"
                         variant={codeTab === "preview" ? "default" : "ghost"}
                         onClick={() => setCodeTab("preview")}
-                        className="h-7 text-xs px-2.5"
+                        className={`h-7 text-xs px-2.5 ${codeTab === "preview" ? "bg-purple-700 text-white" : ""}`}
                       >
                         Live Preview
                       </Button>
@@ -1067,8 +1691,8 @@ export default function LessonGradingPage() {
               )}
 
               {/* Quick Grading Form in Modal */}
-              <div className="p-4 border rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 space-y-3">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+              <div className="p-4 border rounded-lg bg-purple-50/50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 space-y-3">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-purple-900 dark:text-purple-200">
                   Grade This Submission
                 </h4>
                 <div className="flex items-center gap-3">
@@ -1091,7 +1715,7 @@ export default function LessonGradingPage() {
                           },
                         }));
                       }}
-                      className="h-9 text-sm font-bold bg-background"
+                      className="h-9 text-sm font-bold bg-background border-purple-200"
                       placeholder="e.g. 95"
                     />
                   </div>
@@ -1111,15 +1735,15 @@ export default function LessonGradingPage() {
                           },
                         }));
                       }}
-                      placeholder="Great job! Keep it up..."
-                      className="h-9 text-xs bg-background"
+                      placeholder="Great work on this activity! Keep it up..."
+                      className="h-9 text-xs bg-background border-purple-200"
                     />
                   </div>
                   <div className="self-end">
                     <Button
                       onClick={() => viewSubmission && handleSaveGrade(viewSubmission.id)}
                       disabled={savingGradeId === viewSubmission?.id}
-                      className="h-9 px-4 text-xs font-semibold bg-[#1b4332] hover:bg-[#143225] text-white"
+                      className="h-9 px-4 text-xs font-semibold bg-purple-700 hover:bg-purple-800 text-white"
                     >
                       {savingGradeId === viewSubmission?.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
