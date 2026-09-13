@@ -14,33 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      chat_messages: {
-        Row: {
-          created_at: string | null
-          id: string
-          message: string
-          read_at: string | null
-          recipient_id: string | null
-          sender_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          message: string
-          read_at?: string | null
-          recipient_id?: string | null
-          sender_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          message?: string
-          read_at?: string | null
-          recipient_id?: string | null
-          sender_id?: string
-        }
-        Relationships: []
-      }
       admin_settings: {
         Row: {
           created_at: string | null
@@ -187,6 +160,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      chat_messages: {
+        Row: {
+          attachment_name: string | null
+          attachment_type: string | null
+          attachment_url: string | null
+          created_at: string | null
+          edited_at: string | null
+          id: string
+          message: string
+          read_at: string | null
+          recipient_id: string | null
+          sender_id: string
+        }
+        Insert: {
+          attachment_name?: string | null
+          attachment_type?: string | null
+          attachment_url?: string | null
+          created_at?: string | null
+          edited_at?: string | null
+          id?: string
+          message: string
+          read_at?: string | null
+          recipient_id?: string | null
+          sender_id: string
+        }
+        Update: {
+          attachment_name?: string | null
+          attachment_type?: string | null
+          attachment_url?: string | null
+          created_at?: string | null
+          edited_at?: string | null
+          id?: string
+          message?: string
+          read_at?: string | null
+          recipient_id?: string | null
+          sender_id?: string
+        }
+        Relationships: []
       }
       code_templates: {
         Row: {
@@ -652,8 +664,10 @@ export type Database = {
       }
       projects: {
         Row: {
+          code_content: string | null
           course_id: string | null
           description: string | null
+          editor_type: string | null
           feedback: string | null
           file_path: string | null
           grade: number | null
@@ -670,8 +684,10 @@ export type Database = {
           title: string | null
         }
         Insert: {
+          code_content?: string | null
           course_id?: string | null
           description?: string | null
+          editor_type?: string | null
           feedback?: string | null
           file_path?: string | null
           grade?: number | null
@@ -688,8 +704,10 @@ export type Database = {
           title?: string | null
         }
         Update: {
+          code_content?: string | null
           course_id?: string | null
           description?: string | null
+          editor_type?: string | null
           feedback?: string | null
           file_path?: string | null
           grade?: number | null
