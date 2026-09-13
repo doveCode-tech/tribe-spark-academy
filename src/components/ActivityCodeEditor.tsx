@@ -740,11 +740,66 @@ export function ActivityCodeEditor({
     description: string;
     code_content: string;
     editor_type: string;
+    link?: string;
+    file_path?: string;
   }) => {
     const authId = user?.id || userProfile?.auth_user_id;
     if (!authId) throw new Error("Please log in to submit your project.");
 
-    // Ensure user exists in 'users' table
+    // 1. Primary Attempt: PostgreSQL RPC submit_student_project (SECURITY DEFINER)
+    try {
+      const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)("submit_student_project", {
+        _course_id: courseId,
+        _lesson_id: lessonId || null,
+        _title: payload.title,
+        _description: payload.description || null,
+        _code_content: payload.code_content || null,
+        _editor_type: payload.editor_type || null,
+        _link: payload.link || null,
+        _file_path: payload.file_path || null,
+      });
+
+      if (!rpcErr && rpcRes) {
+        // Notify tutors and admins
+        supabase.functions.invoke("notify-project-submission", {
+          body: {
+            projectId: rpcRes.id,
+            courseId,
+            lessonId,
+            studentId: authId,
+            projectTitle: payload.title,
+          },
+        }).catch((err) => console.warn("Background notification note:", err));
+        return true;
+      }
+    } catch (rpcEx) {
+      console.warn("RPC submit_student_project fallback:", rpcEx);
+    }
+
+    // 2. Secondary Attempt: Serverless Edge Function (Service Role Key bypasses RLS policies)
+    try {
+      const { data: fnRes, error: fnErr } = await supabase.functions.invoke("notify-project-submission", {
+        body: {
+          courseId,
+          lessonId,
+          studentId: authId,
+          projectTitle: payload.title,
+          description: payload.description,
+          codeContent: payload.code_content,
+          editorType: payload.editor_type,
+          link: payload.link,
+          filePath: payload.file_path,
+        },
+      });
+
+      if (!fnErr && (fnRes?.success || fnRes?.projectId)) {
+        return true;
+      }
+    } catch (fnEx) {
+      console.warn("Edge function submission fallback:", fnEx);
+    }
+
+    // 3. Tertiary Attempt: Direct client database upsert with candidate ID cycle
     let profileDbId = userProfile?.id;
     let profileAuthId = userProfile?.auth_user_id || authId;
 
@@ -797,6 +852,7 @@ export function ActivityCodeEditor({
           .maybeSingle();
 
         let err = null;
+        let submittedProjId = existing?.id;
         if (existing?.id) {
           const { error: uErr } = await supabase
             .from("projects")
@@ -809,7 +865,7 @@ export function ActivityCodeEditor({
             .eq("id", existing.id);
           err = uErr;
         } else {
-          const { error: iErr } = await supabase
+          const { data: iData, error: iErr } = await supabase
             .from("projects")
             .insert({
               course_id: courseId,
@@ -818,23 +874,45 @@ export function ActivityCodeEditor({
               ...payload,
               review_status: "submitted",
               submitted_at: new Date().toISOString(),
-            });
+            })
+            .select("id")
+            .maybeSingle();
           err = iErr;
+          submittedProjId = iData?.id;
         }
 
         if (!err) {
-          // Submission succeeded!
+          // Submission succeeded! Notify tutors
+          supabase.functions.invoke("notify-project-submission", {
+            body: {
+              projectId: submittedProjId,
+              courseId,
+              studentId: authId,
+              projectTitle: payload.title,
+            },
+          }).catch((e) => console.warn("Background notification note:", e));
           return true;
         }
         lastError = err;
-        if (!err.message?.includes("projects_student_id_fkey")) {
-          throw err;
+        // Continue trying next candidate if FK or RLS policy violation
+        if (
+          err.message?.includes("projects_student_id_fkey") ||
+          err.message?.includes("row-level security policy") ||
+          err.message?.includes("security policy")
+        ) {
+          continue;
         }
+        throw err;
       } catch (e: any) {
         lastError = e;
-        if (!e.message?.includes("projects_student_id_fkey")) {
-          throw e;
+        if (
+          e.message?.includes("projects_student_id_fkey") ||
+          e.message?.includes("row-level security policy") ||
+          e.message?.includes("security policy")
+        ) {
+          continue;
         }
+        throw e;
       }
     }
 
