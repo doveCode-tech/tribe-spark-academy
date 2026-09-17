@@ -84,6 +84,8 @@ export interface LessonData {
   video_urls?: string[] | null;
   youtube_urls?: string[] | null;
   exercises?: ActivityItem[] | any;
+  assignment_data?: any;
+  content_type?: string;
   assignment_required?: boolean;
   quiz_required?: boolean;
   is_end_of_course?: boolean;
@@ -113,8 +115,13 @@ export function LessonActivityDialog({ lesson, courseId, courseTitle, courseCate
   const [isEndOfCourse, setIsEndOfCourse] = useState(lesson?.is_end_of_course || false);
 
   // Videos
-  const [videoUrls, setVideoUrls] = useState<string[]>(lesson?.video_urls || []);
-  const [youtubeUrls, setYoutubeUrls] = useState<string[]>(lesson?.youtube_urls || []);
+  const [videoUrls, setVideoUrls] = useState<string[]>(() => {
+    if (Array.isArray(lesson?.video_urls)) return lesson.video_urls;
+    return lesson?.video_url ? [lesson.video_url] : [];
+  });
+  const [youtubeUrls, setYoutubeUrls] = useState<string[]>(() =>
+    Array.isArray(lesson?.youtube_urls) ? lesson.youtube_urls : []
+  );
   const [newYoutubeUrl, setNewYoutubeUrl] = useState("");
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -160,8 +167,14 @@ export function LessonActivityDialog({ lesson, courseId, courseTitle, courseCate
     setAssignmentRequired(lesson?.assignment_required || false);
     setQuizRequired(lesson?.quiz_required || false);
     setIsEndOfCourse(lesson?.is_end_of_course || false);
-    setVideoUrls(lesson?.video_urls || []);
-    setYoutubeUrls(lesson?.youtube_urls || []);
+    setVideoUrls(
+      Array.isArray(lesson?.video_urls)
+        ? lesson.video_urls
+        : lesson?.video_url
+          ? [lesson.video_url]
+          : []
+    );
+    setYoutubeUrls(Array.isArray(lesson?.youtube_urls) ? lesson.youtube_urls : []);
     setQuizData(lesson?.quiz_data || null);
 
     if (courseTitle) setResolvedTitle(courseTitle);
@@ -440,6 +453,8 @@ export function LessonActivityDialog({ lesson, courseId, courseTitle, courseCate
       video_urls: videoUrls,
       youtube_urls: youtubeUrls,
       exercises: activities,
+      assignment_data: lesson?.assignment_data,
+      content_type: lesson?.content_type,
       assignment_required: assignmentRequired,
       quiz_required: quizRequired || Boolean(quizData?.questions?.length > 0),
       is_end_of_course: isEndOfCourse,

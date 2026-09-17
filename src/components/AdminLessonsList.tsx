@@ -46,6 +46,7 @@ interface Lesson {
   duration_minutes: number;
   order_index: number;
   video_urls: string[] | null;
+  video_url?: string | null;
   youtube_urls: string[] | null;
   exercises: any;
   content_type: string;
@@ -279,17 +280,20 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
     try {
       if (editingLesson) {
         const updatePayload: Record<string, any> = {
-          title: lessonData.title,
-          description: lessonData.description,
-          content: lessonData.content,
-          duration_minutes: lessonData.duration_minutes,
-          video_urls: lessonData.video_urls ?? [],
-          youtube_urls: lessonData.youtube_urls ?? [],
-          exercises: lessonData.exercises ?? [],
-          assignment_required: lessonData.assignment_required ?? false,
-          quiz_required: lessonData.quiz_required ?? false,
-          is_end_of_course: lessonData.is_end_of_course ?? false,
-          quiz_data: lessonData.quiz_data ?? null,
+          title: lessonData.title ?? editingLesson.title,
+          description: lessonData.description ?? editingLesson.description,
+          content: lessonData.content ?? editingLesson.content,
+          instructions: lessonData.instructions ?? (editingLesson as Lesson & { instructions?: string }).instructions,
+          duration_minutes: lessonData.duration_minutes ?? editingLesson.duration_minutes,
+          video_url: lessonData.video_url ?? editingLesson.video_url ?? null,
+          video_urls: lessonData.video_urls ?? editingLesson.video_urls ?? [],
+          youtube_urls: lessonData.youtube_urls ?? editingLesson.youtube_urls ?? [],
+          exercises: lessonData.exercises ?? editingLesson.exercises ?? [],
+          assignment_required: lessonData.assignment_required ?? editingLesson.assignment_required,
+          assignment_data: lessonData.assignment_data ?? editingLesson.assignment_data,
+          quiz_required: lessonData.quiz_required ?? editingLesson.quiz_required,
+          is_end_of_course: lessonData.is_end_of_course ?? editingLesson.is_end_of_course,
+          quiz_data: lessonData.quiz_data ?? editingLesson.quiz_data,
         };
         // Remove undefined keys
         Object.keys(updatePayload).forEach(k => updatePayload[k] === undefined && delete updatePayload[k]);
@@ -300,7 +304,7 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
           .eq('id', editingLesson.id);
 
         if (error) throw error;
-        toast({ title: "Success", description: "Lesson updated successfully." });
+        toast({ title: "Lesson updated successfully." });
       } else {
         const insertData = {
           title: lessonData.title || '',
@@ -330,11 +334,11 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
       setDialogOpen(false);
       setEditingLesson(null);
       fetchLessons();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving lesson:', error);
       toast({
         title: "Error",
-        description: "Failed to save lesson.",
+        description: error?.message || "Failed to save lesson.",
         variant: "destructive",
       });
     }
