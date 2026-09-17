@@ -42,7 +42,10 @@ export function TutorDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isSuperTutor = userProfile?.role === 'admin' || userProfile?.role === 'ultimate_tutor';
+
   useEffect(() => {
+    if (!userProfile) return;
     fetchData();
 
     // Real-time updates for lessons, submissions, and project updates
@@ -56,7 +59,6 @@ export function TutorDashboard() {
           table: 'lessons'
         },
         () => {
-          console.log('Lesson updated - refreshing courses');
           fetchData();
         }
       )
@@ -68,7 +70,6 @@ export function TutorDashboard() {
           table: 'projects'
         },
         () => {
-          console.log('Project updated - refreshing submissions');
           fetchData();
         }
       )
@@ -77,20 +78,46 @@ export function TutorDashboard() {
     return () => {
       supabase.removeChannel(changesChannel);
     };
-  }, []);
+  }, [userProfile]);
 
   const fetchData = async () => {
     try {
+      let assignedCourseIds: string[] | null = null;
+
+      if (!isSuperTutor) {
+        const tutorIds = [userProfile?.auth_user_id, userProfile?.id].filter(Boolean);
+        if (tutorIds.length > 0) {
+          const { data: ctData } = await supabase
+            .from('course_tutors')
+            .select('course_id')
+            .in('tutor_id', tutorIds);
+          assignedCourseIds = (ctData || []).map((ct: any) => ct.course_id);
+        } else {
+          assignedCourseIds = [];
+        }
+      }
+
       // Fetch courses
-      const { data: coursesData, error: coursesError } = await supabase
+      let coursesQuery = supabase
         .from('courses')
         .select('*')
         .order('created_at', { ascending: false });
 
+      if (assignedCourseIds !== null) {
+        if (assignedCourseIds.length === 0) {
+          setCourses([]);
+          setSubmissions([]);
+          setLoading(false);
+          return;
+        }
+        coursesQuery = coursesQuery.in('id', assignedCourseIds);
+      }
+
+      const { data: coursesData, error: coursesError } = await coursesQuery;
       if (coursesError) throw coursesError;
 
       // Fetch student submissions with student and course info
-      const { data: submissionsData, error: submissionsError } = await supabase
+      let submissionsQuery = supabase
         .from('projects')
         .select(`
           id,
@@ -108,6 +135,11 @@ export function TutorDashboard() {
         `)
         .order('submitted_at', { ascending: false });
 
+      if (assignedCourseIds !== null) {
+        submissionsQuery = submissionsQuery.in('course_id', assignedCourseIds);
+      }
+
+      const { data: submissionsData, error: submissionsError } = await submissionsQuery;
       if (submissionsError) throw submissionsError;
 
       setCourses(coursesData || []);
@@ -174,7 +206,9 @@ export function TutorDashboard() {
             <Star className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{submissions.length}</div>
+            <div className="text-2xl font-bold">
+              {submissions.filter(s => s.review_status === 'submitted' || !s.review_status).length}
+            </div>
           </CardContent>
         </Card>
       </div>

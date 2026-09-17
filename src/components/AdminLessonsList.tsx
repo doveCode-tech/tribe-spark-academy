@@ -89,28 +89,40 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
     })
   );
 
+  // Fetch lessons on mount so button displays actual count immediately
+  useEffect(() => {
+    fetchLessons();
+  }, [courseId]);
+
+  // Re-fetch when expanded to ensure fresh state
   useEffect(() => {
     if (isExpanded) {
       fetchLessons();
     }
-  }, [isExpanded, courseId]);
+  }, [isExpanded]);
 
   const fetchLessons = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const queryPromise = supabase
         .from('lessons')
         .select('*')
         .eq('course_id', courseId)
         .order('order_index');
 
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error("Request timed out")), 10000)
+      );
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
       if (error) throw error;
       setLessons((data || []) as Lesson[]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching lessons:', error);
       toast({
         title: "Error",
-        description: "Failed to load lessons.",
+        description: error?.message || "Failed to load lessons.",
         variant: "destructive",
       });
     } finally {
@@ -277,6 +289,7 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
           assignment_required: lessonData.assignment_required ?? false,
           quiz_required: lessonData.quiz_required ?? false,
           is_end_of_course: lessonData.is_end_of_course ?? false,
+          quiz_data: lessonData.quiz_data ?? null,
         };
         // Remove undefined keys
         Object.keys(updatePayload).forEach(k => updatePayload[k] === undefined && delete updatePayload[k]);
@@ -302,6 +315,7 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
           assignment_required: lessonData.assignment_required ?? false,
           quiz_required: lessonData.quiz_required ?? false,
           is_end_of_course: lessonData.is_end_of_course ?? false,
+          quiz_data: lessonData.quiz_data ?? null,
           content_type: 'lesson'
         };
         
@@ -381,9 +395,9 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
   return (
     <Collapsible open={isExpanded} onOpenChange={onToggle}>
       <CollapsibleTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button type="button" variant="outline" size="sm" className="gap-2">
           <BookOpen className="w-4 h-4" />
-          Lessons ({lessons.length || '...'})
+          Lessons ({loading && lessons.length === 0 ? '...' : lessons.length})
           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </Button>
       </CollapsibleTrigger>
@@ -406,15 +420,19 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
                       Add Lesson
                     </Button>
                   </DialogTrigger>
-                  <LessonActivityDialog 
-                    lesson={editingLesson}
-                    courseId={courseId}
-                    onSave={saveLesson}
-                    onCancel={() => {
-                      setDialogOpen(false);
-                      setEditingLesson(null);
-                    }}
-                  />
+                  {dialogOpen && (
+                    <LessonActivityDialog 
+                      lesson={editingLesson}
+                      courseId={courseId}
+                      courseTitle={courseTitle}
+                      courseCategory={category}
+                      onSave={saveLesson}
+                      onCancel={() => {
+                        setDialogOpen(false);
+                        setEditingLesson(null);
+                      }}
+                    />
+                  )}
                 </Dialog>
               </div>
             </div>
@@ -455,169 +473,173 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
 
         {/* Submissions Dialog */}
         <Dialog open={submissionsDialogOpen} onOpenChange={setSubmissionsDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-            <DialogHeader className="pb-3 border-b">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <DialogTitle className="text-lg font-bold">Student Submissions</DialogTitle>
-                  <DialogDescription className="text-xs">
-                    Submissions for {selectedLesson?.title}
-                  </DialogDescription>
+          {submissionsDialogOpen && (
+            <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+              <DialogHeader className="pb-3 border-b">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <DialogTitle className="text-lg font-bold">Student Submissions</DialogTitle>
+                    <DialogDescription className="text-xs">
+                      Submissions for {selectedLesson?.title}
+                    </DialogDescription>
+                  </div>
+                  {selectedLesson && (
+                    <Button
+                      size="sm"
+                      className="bg-[#1b4332] hover:bg-[#143225] text-white text-xs gap-1.5 shrink-0"
+                      onClick={() => {
+                        setSubmissionsDialogOpen(false);
+                        navigate(`/courses/${courseId}/lessons/${selectedLesson.id}/grading`);
+                      }}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Open Full Submissions Page ↗
+                    </Button>
+                  )}
                 </div>
-                {selectedLesson && (
-                  <Button
-                    size="sm"
-                    className="bg-[#1b4332] hover:bg-[#143225] text-white text-xs gap-1.5 shrink-0"
-                    onClick={() => {
-                      setSubmissionsDialogOpen(false);
-                      navigate(`/courses/${courseId}/lessons/${selectedLesson.id}/grading`);
-                    }}
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    Open Full Submissions Page ↗
-                  </Button>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto space-y-3 py-2">
+                {submissions.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground space-y-2">
+                    <FileText className="w-10 h-10 mx-auto opacity-30" />
+                    <p>No submissions recorded for this lesson yet.</p>
+                  </div>
+                ) : (
+                  submissions.map((sub) => (
+                    <div key={sub.id} className="p-4 border rounded-lg bg-card space-y-3 shadow-xs">
+                      <div className="flex justify-between items-start gap-3">
+                        <div>
+                          <p className="font-bold text-sm text-foreground">
+                            {sub.student?.name || sub.student?.email || "Student"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{sub.student?.email}</p>
+                          <p className="text-xs font-semibold text-primary mt-1">
+                            {sub.title || "Project Submission"}
+                          </p>
+                          {sub.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                              {sub.description}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Submitted: {new Date(sub.submitted_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {sub.grade !== null || sub.review_status === "graded" ? (
+                            <Badge className="bg-emerald-600 text-white text-xs">
+                              Graded: {sub.grade}%
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-amber-500 text-white text-xs">
+                              Pending Review
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actual Submission Links & Code */}
+                      <div className="p-3 bg-muted/40 rounded-md border text-xs space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Actual URL link */}
+                          {sub.link && (
+                            <a
+                              href={sub.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-bold hover:underline border border-blue-200 text-xs"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Open Student Link: {sub.link}
+                            </a>
+                          )}
+
+                          {/* Submitted Code Button */}
+                          {sub.code_content && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1.5"
+                              onClick={() => setViewingCode({ title: sub.title || "Submitted Code", code: sub.code_content })}
+                            >
+                              <Code2 className="w-3.5 h-3.5" />
+                              View Submitted Code
+                            </Button>
+                          )}
+
+                          {/* File download link */}
+                          {sub.file_path && (
+                            <a
+                              href={supabase.storage.from("project-submissions").getPublicUrl(sub.file_path).data.publicUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 font-bold hover:underline border border-purple-200 text-xs"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              Download Project File
+                            </a>
+                          )}
+
+                          {!sub.link && !sub.code_content && !sub.file_path && (
+                            <span className="text-muted-foreground italic">No external link or code attached.</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Quick Grade & Feedback inputs */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className="w-24">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            placeholder="Grade %"
+                            value={gradeInput[sub.id] ?? ""}
+                            onChange={(e) => setGradeInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                            className="h-8 text-xs font-semibold"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Feedback..."
+                            value={feedbackInput[sub.id] ?? ""}
+                            onChange={(e) => setFeedbackInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          disabled={savingGradeId === sub.id}
+                          onClick={() => handleSaveGradeInDialog(sub.id)}
+                          className="h-8 text-xs bg-[#1b4332] hover:bg-[#143225] text-white shrink-0"
+                        >
+                          {savingGradeId === sub.id ? "Saving..." : "Save Grade"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto space-y-3 py-2">
-              {submissions.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground space-y-2">
-                  <FileText className="w-10 h-10 mx-auto opacity-30" />
-                  <p>No submissions recorded for this lesson yet.</p>
-                </div>
-              ) : (
-                submissions.map((sub) => (
-                  <div key={sub.id} className="p-4 border rounded-lg bg-card space-y-3 shadow-xs">
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <p className="font-bold text-sm text-foreground">
-                          {sub.student?.name || sub.student?.email || "Student"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{sub.student?.email}</p>
-                        <p className="text-xs font-semibold text-primary mt-1">
-                          {sub.title || "Project Submission"}
-                        </p>
-                        {sub.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {sub.description}
-                          </p>
-                        )}
-                        <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Submitted: {new Date(sub.submitted_at).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        {sub.grade !== null || sub.review_status === "graded" ? (
-                          <Badge className="bg-emerald-600 text-white text-xs">
-                            Graded: {sub.grade}%
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-amber-500 text-white text-xs">
-                            Pending Review
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actual Submission Links & Code */}
-                    <div className="p-3 bg-muted/40 rounded-md border text-xs space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Actual URL link */}
-                        {sub.link && (
-                          <a
-                            href={sub.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-bold hover:underline border border-blue-200 text-xs"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Open Student Link: {sub.link}
-                          </a>
-                        )}
-
-                        {/* Submitted Code Button */}
-                        {sub.code_content && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs gap-1.5"
-                            onClick={() => setViewingCode({ title: sub.title || "Submitted Code", code: sub.code_content })}
-                          >
-                            <Code2 className="w-3.5 h-3.5" />
-                            View Submitted Code
-                          </Button>
-                        )}
-
-                        {/* File download link */}
-                        {sub.file_path && (
-                          <a
-                            href={supabase.storage.from("project-submissions").getPublicUrl(sub.file_path).data.publicUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 font-bold hover:underline border border-purple-200 text-xs"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            Download Project File
-                          </a>
-                        )}
-
-                        {!sub.link && !sub.code_content && !sub.file_path && (
-                          <span className="text-muted-foreground italic">No external link or code attached.</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Quick Grade & Feedback inputs */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <div className="w-24">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          placeholder="Grade %"
-                          value={gradeInput[sub.id] ?? ""}
-                          onChange={(e) => setGradeInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                          className="h-8 text-xs font-semibold"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Input
-                          placeholder="Feedback..."
-                          value={feedbackInput[sub.id] ?? ""}
-                          onChange={(e) => setFeedbackInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <Button
-                        size="sm"
-                        disabled={savingGradeId === sub.id}
-                        onClick={() => handleSaveGradeInDialog(sub.id)}
-                        className="h-8 text-xs bg-[#1b4332] hover:bg-[#143225] text-white shrink-0"
-                      >
-                        {savingGradeId === sub.id ? "Saving..." : "Save Grade"}
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </DialogContent>
+            </DialogContent>
+          )}
         </Dialog>
 
         {/* Code Viewer Dialog */}
         <Dialog open={!!viewingCode} onOpenChange={() => setViewingCode(null)}>
-          <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-sm">
-                <Code2 className="w-4 h-4 text-primary" />
-                {viewingCode?.title}
-              </DialogTitle>
-            </DialogHeader>
-            <pre className="p-4 bg-zinc-950 text-zinc-100 font-mono text-xs rounded-lg overflow-auto flex-1 whitespace-pre-wrap leading-relaxed">
-              {viewingCode?.code}
-            </pre>
-          </DialogContent>
+          {viewingCode && (
+            <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-sm">
+                  <Code2 className="w-4 h-4 text-primary" />
+                  {viewingCode?.title}
+                </DialogTitle>
+              </DialogHeader>
+              <pre className="p-4 bg-zinc-950 text-zinc-100 font-mono text-xs rounded-lg overflow-auto flex-1 whitespace-pre-wrap leading-relaxed">
+                {viewingCode?.code}
+              </pre>
+            </DialogContent>
+          )}
         </Dialog>
       </CollapsibleContent>
     </Collapsible>

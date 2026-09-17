@@ -1,17 +1,20 @@
-import { BookOpen, Trophy, Clock, MessageCircle, BarChart3, Star, GraduationCap, Sparkles } from "lucide-react";
+import { BookOpen, Trophy, Clock, MessageCircle, BarChart3, Star, GraduationCap, Sparkles, Search, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { HeroSection } from "./HeroSection";
 import { CourseCard } from "./CourseCard";
 import { StudentProjectsList } from "./StudentProjectsList";
 import { StreakDisplay } from "./StreakDisplay";
 import { LearningCalendar } from "./LearningCalendar";
-
+import { XPLevelWidget } from "./gamification/XPLevelWidget";
+import { LevelUpModal } from "./gamification/LevelUpModal";
+import { getDualIdArray } from "@/utils/identity";
 
 export function StudentDashboard() {
   const { userProfile } = useAuth();
@@ -20,6 +23,51 @@ export function StudentDashboard() {
   const [achievements, setAchievements] = useState<any[]>([]);
   const [portfolioProjects, setPortfolioProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [courseSearch, setCourseSearch] = useState("");
+
+  const sortedAndFilteredCourses = useMemo(() => {
+    // 1. Sort by:
+    // - In-progress courses (0 < prog < 100) first (latest worked on / most incomplete)
+    // - Unstarted courses (prog === 0) next
+    // - 100% completed courses all the way at the bottom
+    const sorted = [...enrolledCourses].sort((a, b) => {
+      const progA = a.progress_percentage || 0;
+      const progB = b.progress_percentage || 0;
+      const isCompletedA = progA >= 100;
+      const isCompletedB = progB >= 100;
+
+      if (isCompletedA && !isCompletedB) return 1;
+      if (!isCompletedA && isCompletedB) return -1;
+
+      if (isCompletedA && isCompletedB) {
+        return new Date(b.updated_at || b.enrolled_at || 0).getTime() -
+               new Date(a.updated_at || a.enrolled_at || 0).getTime();
+      }
+
+      const inProgressA = progA > 0 && progA < 100;
+      const inProgressB = progB > 0 && progB < 100;
+
+      if (inProgressA && !inProgressB) return -1;
+      if (!inProgressA && inProgressB) return 1;
+
+      const timeA = new Date(a.updated_at || a.enrolled_at || 0).getTime();
+      const timeB = new Date(b.updated_at || b.enrolled_at || 0).getTime();
+      if (timeA !== timeB && Math.abs(timeA - timeB) > 5000) {
+        return timeB - timeA;
+      }
+
+      return progA - progB;
+    });
+
+    if (!courseSearch.trim()) return sorted;
+    const q = courseSearch.toLowerCase();
+    return sorted.filter((e) => {
+      const title = (e.courses?.title || "").toLowerCase();
+      const desc = (e.courses?.description || "").toLowerCase();
+      const cat = (e.courses?.category || "").toLowerCase();
+      return title.includes(q) || desc.includes(q) || cat.includes(q);
+    });
+  }, [enrolledCourses, courseSearch]);
 
   useEffect(() => {
     if (userProfile) {
@@ -83,8 +131,8 @@ export function StudentDashboard() {
 
   const fetchEnrolledCourses = async () => {
     try {
-      const studentId = userProfile?.auth_user_id;
-      if (!studentId) return;
+      const studentIds = getDualIdArray(userProfile);
+      if (studentIds.length === 0) return;
 
       const { data, error } = await supabase
         .from('enrollments')
@@ -92,7 +140,7 @@ export function StudentDashboard() {
           *,
           courses (*)
         `)
-        .eq('student_id', studentId)
+        .in('student_id', studentIds)
         .eq('status', 'active');
 
       if (error) {
@@ -111,8 +159,6 @@ export function StudentDashboard() {
 
   const fetchAvailableCourses = async () => {
     try {
-      // Students should only see enrolled courses, not all available courses
-      // Remove this to prevent showing "Enroll Now" for students
       setAvailableCourses([]);
     } catch (error) {
       console.error('Error fetching available courses:', error);
@@ -121,13 +167,16 @@ export function StudentDashboard() {
 
   const fetchAchievements = async () => {
     try {
+      const studentIds = getDualIdArray(userProfile);
+      if (studentIds.length === 0) return;
+
       const { data } = await supabase
         .from('student_badges')
         .select(`
           earned_at,
           badges(*)
         `)
-        .eq('student_id', userProfile?.auth_user_id);
+        .in('student_id', studentIds);
       
       setAchievements(data?.map(b => ({ ...b.badges, earned_at: b.earned_at })) || []);
     } catch (error) {
@@ -138,10 +187,13 @@ export function StudentDashboard() {
 
   const fetchPortfolioProjects = async () => {
     try {
+      const studentIds = getDualIdArray(userProfile);
+      if (studentIds.length === 0) return;
+
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .eq('student_id', userProfile?.auth_user_id);
+        .in('student_id', studentIds);
 
       if (error) {
         console.error('Error fetching portfolio projects:', error);
@@ -175,6 +227,12 @@ export function StudentDashboard() {
         progressPercentage={averageProgress}
         onStartLearning={() => window.location.href = '/courses'} 
       />
+
+      {/* Level & XP Progression Widget */}
+      <XPLevelWidget />
+
+      {/* Level Up Celebratory Modal */}
+      <LevelUpModal />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -214,14 +272,37 @@ export function StudentDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* My Active Courses */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold flex items-center">
-              <BookOpen className="w-6 h-6 mr-2 text-primary" />
-              My Courses
-            </h2>
-            <Button variant="outline" onClick={() => window.location.href = '/courses'}>
-              View All
-            </Button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-6 h-6 text-primary" />
+              <h2 className="text-2xl font-bold">My Courses</h2>
+              <Badge variant="secondary" className="text-xs font-semibold px-2">
+                {sortedAndFilteredCourses.length}
+              </Badge>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Filter courses by name..."
+                  value={courseSearch}
+                  onChange={(e) => setCourseSearch(e.target.value)}
+                  className="pl-9 pr-8 h-9 text-xs rounded-lg"
+                />
+                {courseSearch && (
+                  <button
+                    onClick={() => setCourseSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => window.location.href = '/courses'} className="shrink-0 text-xs">
+                View All
+              </Button>
+            </div>
           </div>
 
           {loading ? (
@@ -237,9 +318,20 @@ export function StudentDashboard() {
                 You haven't been enrolled in any courses yet. Your tutor or administrator will assign your courses shortly!
               </p>
             </Card>
+          ) : sortedAndFilteredCourses.length === 0 ? (
+            <Card className="p-8 text-center border-dashed">
+              <Search className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-60" />
+              <h3 className="text-base font-semibold mb-1">No courses match "{courseSearch}"</h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Try searching with a different term or clear the filter.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setCourseSearch("")}>
+                Clear Filter
+              </Button>
+            </Card>
           ) : (
             <div className="grid gap-6">
-              {enrolledCourses.slice(0, 3).map((enrollment) => (
+              {(courseSearch.trim() ? sortedAndFilteredCourses : sortedAndFilteredCourses.slice(0, 4)).map((enrollment) => (
                 <CourseCard
                   key={enrollment.id}
                   course={enrollment.courses}

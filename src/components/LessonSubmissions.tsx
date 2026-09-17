@@ -135,6 +135,22 @@ export function LessonSubmissions({ lessonId, courseId }: LessonSubmissionsProps
         });
       }
 
+      // Upsert lesson_progress completed = true
+      if (targetSub?.student_id && lessonId) {
+        try {
+          await supabase
+            .from("lesson_progress")
+            .upsert({
+              student_id: targetSub.student_id,
+              lesson_id: lessonId,
+              completed: true,
+              completed_at: new Date().toISOString(),
+            });
+        } catch (progErr) {
+          console.warn("Could not upsert lesson_progress:", progErr);
+        }
+      }
+
       toast({ title: "Graded!", description: "Grade saved successfully." });
       setGradingId(null);
       setGrade("");

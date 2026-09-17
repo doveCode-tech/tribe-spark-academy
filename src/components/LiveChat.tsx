@@ -24,6 +24,7 @@ interface ChatMessage {
 }
 
 interface ChatUser {
+  id?: string;
   auth_user_id: string;
   name: string | null;
   first_name: string | null;
@@ -125,7 +126,7 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           // Staff: load all users for sidebar + sender lookup
           const { data, error } = await supabase
             .from("users")
-            .select("auth_user_id, name, first_name, last_name, email, role, avatar_url")
+            .select("id, auth_user_id, name, first_name, last_name, email, role, avatar_url")
             .neq("auth_user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -136,7 +137,19 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
           // Sidebar shows only students
           const studentContacts = users.filter(u => normalizeRole(u.role) === "student");
           setContacts(studentContacts);
-          if (studentContacts.length > 0 && !selectedContactRef.current) {
+
+          // Check if a specific user was requested via ?user= query param
+          const urlParams = new URLSearchParams(window.location.search);
+          const targetUserId = urlParams.get("user");
+
+          let targetContact: ChatUser | null = null;
+          if (targetUserId) {
+            targetContact = users.find(u => u.auth_user_id === targetUserId || u.id === targetUserId) || null;
+          }
+
+          if (targetContact) {
+            setSelectedContact(targetContact);
+          } else if (studentContacts.length > 0 && !selectedContactRef.current) {
             setSelectedContact(studentContacts[0]);
           }
         }
@@ -149,6 +162,21 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
 
     load();
   }, [user, userProfile, isStudent]);
+
+  // Support switching selected user if URL query changes
+  useEffect(() => {
+    if (isStudent || allUsers.length === 0) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetUserId = urlParams.get("user");
+    if (!targetUserId) return;
+
+    const matched = allUsers.find(
+      (u) => u.auth_user_id === targetUserId || u.id === targetUserId
+    );
+    if (matched && matched.auth_user_id !== selectedContact?.auth_user_id) {
+      setSelectedContact(matched);
+    }
+  }, [allUsers, isStudent, selectedContact]);
 
   // ─── Load messages when staff selects a student ─────────────────────────────
   useEffect(() => {

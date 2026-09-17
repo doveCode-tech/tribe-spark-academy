@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { CourseProgressTracker } from '@/components/CourseProgressTracker';
+import { getDualIdArray } from '@/utils/identity';
 import { InCourseGames } from '@/components/InCourseGames';
 import { QuizInterface } from '@/components/QuizInterface';
 import { ProjectSubmission } from '@/components/ProjectSubmission';
@@ -59,12 +60,12 @@ export default function CourseDetail() {
     }
   }, [courseId, user]);
 
-  // Real-time subscription for lesson updates
+  // Real-time subscription for lesson updates and student progress
   useEffect(() => {
     if (!courseId) return;
 
     const channel = supabase
-      .channel(`lessons-${courseId}`)
+      .channel(`course-detail-${courseId}`)
       .on(
         'postgres_changes',
         {
@@ -77,12 +78,34 @@ export default function CourseDetail() {
           fetchCourseData();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_progress'
+        },
+        () => {
+          fetchCourseData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects'
+        },
+        () => {
+          fetchCourseData();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [courseId, user]);
+  }, [courseId, user, userProfile]);
 
   const fetchCourseData = async () => {
     try {
@@ -135,24 +158,66 @@ export default function CourseDetail() {
         throw lessonsError;
       }
 
-      // Fetch lesson progress
-      const { data: progressData } = await supabase
-        .from('lesson_progress')
-        .select('lesson_id, completed')
-        .eq('student_id', user?.id);
+      // Fetch lesson progress with dual-ID support
+      const studentIds = getDualIdArray(userProfile);
+      const studentIdList = studentIds.length > 0 ? studentIds : [user?.id].filter(Boolean);
 
+      const [progressRes, projectsRes] = await Promise.all([
+        supabase
+          .from('lesson_progress')
+          .select('lesson_id, completed')
+          .in('student_id', studentIdList),
+        supabase
+          .from('projects')
+          .select('id, lesson_id, student_id, review_status, grade, feedback, submitted_at')
+          .in('student_id', studentIdList)
+      ]);
+
+      const progressData = progressRes.data || [];
+      const projectSubmissions = projectsRes.data || [];
+
+      const courseLessonIdSet = new Set((lessonsData || []).map(l => l.id));
       const progressMap = new Map(
-        progressData?.map(p => [p.lesson_id, p.completed]) || []
+        progressData
+          .filter(p => courseLessonIdSet.has(p.lesson_id))
+          .map(p => [p.lesson_id, p.completed])
       );
 
-      const lessonsWithProgress = lessonsData?.map(lesson => ({
-        ...lesson,
-        completed: progressMap.get(lesson.id) || false
-      })) || [];
+      const projectMap = new Map<string, any>();
+      projectSubmissions.forEach((proj: any) => {
+        if (proj.lesson_id) {
+          const existing = projectMap.get(proj.lesson_id);
+          if (!existing || proj.review_status === 'graded' || new Date(proj.submitted_at).getTime() > new Date(existing.submitted_at).getTime()) {
+            projectMap.set(proj.lesson_id, proj);
+          }
+        }
+      });
+
+      const lessonsWithProgress = (lessonsData || []).map(lesson => {
+        const sub = projectMap.get(lesson.id);
+        const isGraded = sub?.review_status === 'graded' && sub?.grade !== null && sub?.grade !== undefined;
+        
+        const exercisesList: any[] = Array.isArray(lesson.exercises) ? lesson.exercises : [];
+        const hasProject = lesson.assignment_required || exercisesList.some((ex: any) => 
+          ex.is_assignment || ex.type === 'project' || (ex.title && ex.title.toLowerCase().includes('graded project'))
+        );
+
+        // A lesson is strictly complete ONLY when evaluated and graded by instructor/admin
+        const isCompleted = hasProject ? isGraded : (Boolean(progressMap.get(lesson.id)) || isGraded);
+
+        return {
+          ...lesson,
+          completed: isCompleted,
+          submission: sub || null,
+          submission_status: sub?.review_status || (sub ? 'submitted' : 'none'),
+          grade: sub?.grade ?? null,
+          feedback: sub?.feedback ?? null,
+        };
+      });
 
       setLessons(lessonsWithProgress);
 
-      // Calculate overall progress
+      // Calculate overall progress strictly within this course
       const completedCount = lessonsWithProgress.filter(l => l.completed).length;
       const progressPercentage = lessonsWithProgress.length > 0 
         ? Math.round((completedCount / lessonsWithProgress.length) * 100) 
@@ -171,13 +236,19 @@ export default function CourseDetail() {
     }
   };
 
-  const startLesson = async (lessonId: string) => {
+  const startLesson = (lessonId: string) => {
+    navigate(`/lesson/${lessonId}`);
+  };
+
+  const completeLesson = async (lessonId: string) => {
     try {
-      // Mark lesson as started/update progress
+      const studentAuthId = user?.id || userProfile?.auth_user_id;
+      if (!studentAuthId) return;
+
       const { error } = await supabase
         .from('lesson_progress')
         .upsert({
-          student_id: user?.id,
+          student_id: studentAuthId,
           lesson_id: lessonId,
           completed: true,
           completed_at: new Date().toISOString()
@@ -185,27 +256,27 @@ export default function CourseDetail() {
 
       if (error) throw error;
 
-      // Record learning activity for streak tracking
-      await supabase.rpc('record_learning_activity', {
-        _activity_type: 'lesson_complete',
-        _lesson_id: lessonId,
-        _course_id: courseId,
-        _points: 1
-      });
-
-      // Award streak badges if applicable
       try {
-        await supabase.rpc('award_streak_badges');
-      } catch (badgeError) {
-        console.error('Error awarding streak badges:', badgeError);
-        // Don't fail the lesson completion if badge awarding fails
+        await (supabase.rpc as any)('record_learning_activity', {
+          _activity_type: 'lesson_complete',
+          _lesson_id: lessonId,
+          _course_id: courseId,
+          _points: 1
+        });
+      } catch (streakError) {
+        console.warn('Streak recording note:', streakError);
       }
 
-      // Refresh data
+      try {
+        await (supabase.rpc as any)('award_streak_badges');
+      } catch (badgeError) {
+        console.warn('Badge award note:', badgeError);
+      }
+
       fetchCourseData();
 
       toast({
-        title: "Lesson Completed!",
+        title: "Lesson Completed! 🎉",
         description: "Great job on completing this lesson.",
       });
 

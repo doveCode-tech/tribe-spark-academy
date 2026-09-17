@@ -559,7 +559,7 @@ function CourseCardWithLessons({
         courseTitle={course.title}
         category={course.category}
         isExpanded={lessonsExpanded}
-        onToggle={() => setLessonsExpanded(!lessonsExpanded)}
+        onToggle={() => setLessonsExpanded(prev => !prev)}
       />
     </div>
   );

@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, BookOpen, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, BookOpen, Trophy, ExternalLink } from "lucide-react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -14,6 +16,7 @@ interface ActivityDay {
 
 export function LearningCalendar() {
   const { userProfile } = useAuth();
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activityData, setActivityData] = useState<ActivityDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,8 +38,8 @@ export function LearningCalendar() {
       endDate.setDate(endDate.getDate() + 7);
 
       const { data, error } = await supabase.rpc('get_learning_activity_calendar', {
-        _start_date: startDate.toISOString().split('T')[0],
-        _end_date: endDate.toISOString().split('T')[0]
+        _start_date: format(startDate, 'yyyy-MM-dd'),
+        _end_date: format(endDate, 'yyyy-MM-dd')
       });
 
       if (error) throw error;
@@ -50,7 +53,7 @@ export function LearningCalendar() {
   };
 
   const getActivityForDate = (date: Date): ActivityDay | null => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = format(date, 'yyyy-MM-dd');
     return activityData.find(day => day.activity_date === dateStr) || null;
   };
 
@@ -144,10 +147,11 @@ export function LearningCalendar() {
   const getMonthStats = () => {
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const startStr = format(startOfMonth, 'yyyy-MM-dd');
+    const endStr = format(endOfMonth, 'yyyy-MM-dd');
     
     const monthActivities = activityData.filter(day => {
-      const dayDate = new Date(day.activity_date);
-      return dayDate >= startOfMonth && dayDate <= endOfMonth;
+      return day.activity_date >= startStr && day.activity_date <= endStr;
     });
 
     const activeDays = monthActivities.length;
@@ -183,9 +187,20 @@ export function LearningCalendar() {
             <CalendarIcon className="w-5 h-5 mr-2 text-primary" />
             Learning Calendar
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={goToToday}>
-            Today
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={goToToday} className="h-7 text-xs">
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs text-primary gap-1 border-primary/30 hover:bg-primary/10"
+              onClick={() => navigate('/calendar')}
+            >
+              <span>Full Calendar</span>
+              <ExternalLink className="w-3 h-3" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

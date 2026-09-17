@@ -29,10 +29,14 @@ import {
   Lightbulb,
   Volume2,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Sparkles
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getSubjectQuickTemplates } from "@/utils/aiCourseAssistant";
+import { AIAssistantDialog } from "@/components/AIAssistantDialog";
+import { QuizCurator } from "@/components/QuizCurator";
 
 export interface ActivityHint {
   step?: number;
@@ -58,6 +62,7 @@ export interface ActivityItem {
   starter_code?: string;
   external_url?: string;
   is_assignment: boolean;
+  xp_reward?: number;
   status: "published" | "draft";
   type?: string;
   hints?: ActivityHint[];
@@ -82,17 +87,20 @@ export interface LessonData {
   assignment_required?: boolean;
   quiz_required?: boolean;
   is_end_of_course?: boolean;
+  quiz_data?: any;
   order_index?: number;
 }
 
 interface LessonActivityDialogProps {
   lesson: LessonData | null;
   courseId: string;
+  courseTitle?: string;
+  courseCategory?: string;
   onSave: (data: Partial<LessonData>) => void;
   onCancel: () => void;
 }
 
-export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: LessonActivityDialogProps) {
+export function LessonActivityDialog({ lesson, courseId, courseTitle, courseCategory, onSave, onCancel }: LessonActivityDialogProps) {
   const { toast } = useToast();
 
   // Basic lesson info
@@ -111,11 +119,18 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [uploadingVideo, setUploadingVideo] = useState(false);
 
+  // Course Context & AI Assistant State
+  const [resolvedTitle, setResolvedTitle] = useState(courseTitle || "");
+  const [resolvedCategory, setResolvedCategory] = useState(courseCategory || "");
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [quizData, setQuizData] = useState<any>(lesson?.quiz_data || null);
+
   // Activities
+  const [previewMode, setPreviewMode] = useState(false);
   const [activities, setActivities] = useState<ActivityItem[]>(() => {
     if (Array.isArray(lesson?.exercises)) {
       return lesson.exercises.map((ex: any, idx: number) => ({
-        id: ex.id || `act_${Date.now()}_${idx}`,
+        id: ex.id || crypto.randomUUID(),
         title: ex.title || `Activity ${idx + 1}`,
         instructions: ex.instructions || ex.description || "",
         editor_type: ex.editor_type || (ex.type === "video" ? "none" : "monaco_html"),
@@ -123,6 +138,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
         starter_code: ex.starter_code || "",
         external_url: ex.external_url || "",
         is_assignment: ex.is_assignment ?? false,
+        xp_reward: ex.xp_reward || (ex.is_assignment ? 100 : ex.type === "reading" ? 20 : 40),
         status: ex.status || "published",
         type: ex.type || "practice",
         hints: Array.isArray(ex.hints) ? ex.hints : [],
@@ -146,10 +162,26 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
     setIsEndOfCourse(lesson?.is_end_of_course || false);
     setVideoUrls(lesson?.video_urls || []);
     setYoutubeUrls(lesson?.youtube_urls || []);
+    setQuizData(lesson?.quiz_data || null);
+
+    if (courseTitle) setResolvedTitle(courseTitle);
+    if (courseCategory) setResolvedCategory(courseCategory);
+
+    if (!courseTitle && courseId) {
+      supabase
+        .from('courses')
+        .select('title, category')
+        .eq('id', courseId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.title) setResolvedTitle(data.title);
+          if (data?.category) setResolvedCategory(data.category);
+        });
+    }
 
     if (Array.isArray(lesson?.exercises)) {
       setActivities(lesson.exercises.map((ex: any, idx: number) => ({
-        id: ex.id || `act_${Date.now()}_${idx}`,
+        id: ex.id || crypto.randomUUID(),
         title: ex.title || `Activity ${idx + 1}`,
         instructions: ex.instructions || ex.description || "",
         editor_type: ex.editor_type || (ex.type === "video" ? "none" : "monaco_html"),
@@ -157,6 +189,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
         starter_code: ex.starter_code || "",
         external_url: ex.external_url || "",
         is_assignment: ex.is_assignment ?? false,
+        xp_reward: ex.xp_reward || (ex.is_assignment ? 100 : ex.type === "reading" ? 20 : 40),
         status: ex.status || "published",
         type: ex.type || "practice",
         hints: Array.isArray(ex.hints) ? ex.hints : [],
@@ -169,7 +202,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
     } else {
       setActivities([]);
     }
-  }, [lesson]);
+  }, [lesson, courseId, courseTitle, courseCategory]);
 
   // ── Video Handlers ─────────────────────────────────────────────────────────
   const [uploadingState, setUploadingState] = useState<Record<string, boolean>>({});
@@ -273,7 +306,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
   // ── Activity Handlers ──────────────────────────────────────────────────────
   const addActivity = () => {
     const newAct: ActivityItem = {
-      id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: crypto.randomUUID(),
       title: `Activity ${activities.length + 1}`,
       instructions: "",
       editor_type: "monaco_html",
@@ -281,6 +314,7 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
       starter_code: "",
       external_url: "",
       is_assignment: false,
+      xp_reward: 40,
       status: "published",
       type: "practice",
       hints: [],
@@ -291,6 +325,81 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
       step_outcomes: [],
     };
     setActivities(prev => [...prev, newAct]);
+  };
+
+  const addPresetActivity = (preset: "python_debug" | "web_challenge" | "scratch_game" | "reading" | "capstone") => {
+    const baseId = `act_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    let item: ActivityItem;
+
+    if (preset === "python_debug") {
+      item = {
+        id: baseId,
+        title: "Bug Hunt: Fix the Python Algorithm",
+        instructions: "There are 2 intentional syntax and logic errors in this Python script. Find them, fix the code, and run it to test output!",
+        editor_type: "monaco_python",
+        project_mode: "debug",
+        starter_code: "def calculate_energy(mass, velocity):\n    # Fix Bug 1 & 2\n    energy = 0.5 * mass * (velocity ^ 2)\n    print(f'Calculated Energy: {energy}')\n\ncalculate_energy(10, 5)\n",
+        is_assignment: false,
+        xp_reward: 50,
+        status: "published",
+        type: "debug",
+        hints: [{ step: 1, text: "In Python, exponentiation is written with ** instead of ^." }],
+      };
+    } else if (preset === "scratch_game") {
+      item = {
+        id: baseId,
+        title: "Scratch Animation & Game Builder",
+        instructions: "Build an interactive animated character using Scratch block code. Add movement, sounds, and score tracking!",
+        editor_type: "scratch",
+        project_mode: "standard",
+        external_url: "https://scratch.mit.edu/projects/editor/",
+        is_assignment: false,
+        xp_reward: 40,
+        status: "published",
+        type: "practice",
+      };
+    } else if (preset === "reading") {
+      item = {
+        id: baseId,
+        title: "Key STEM Concepts & Reading",
+        instructions: "Read through this overview of the core theory. Pay attention to how variables, loops, and conditions interact!",
+        editor_type: "none",
+        project_mode: "standard",
+        is_assignment: false,
+        xp_reward: 20,
+        status: "published",
+        type: "reading",
+      };
+    } else if (preset === "capstone") {
+      item = {
+        id: baseId,
+        title: "Hands-on Capstone Project",
+        instructions: "Design and code your full interactive project. When satisfied with your solution, submit it to your tutor for review!",
+        editor_type: "monaco_html",
+        project_mode: "starter",
+        is_assignment: true,
+        xp_reward: 100,
+        status: "published",
+        type: "assignment",
+      };
+    } else {
+      // web_challenge
+      item = {
+        id: baseId,
+        title: "Interactive Web Component Challenge",
+        instructions: "Style and code an interactive web widget. Use HTML markup and CSS flexbox to center and animate your element.",
+        editor_type: "monaco_html",
+        project_mode: "starter",
+        starter_code: "<div class=\"card\">\n  <h2>My Robotics Web Card</h2>\n  <button onclick=\"alert('Robot Activated!')\">Activate</button>\n</div>",
+        is_assignment: false,
+        xp_reward: 40,
+        status: "published",
+        type: "practice",
+      };
+    }
+
+    setActivities(prev => [...prev, item]);
+    toast({ title: "Template Added", description: `Added "${item.title}" (+${item.xp_reward} XP)` });
   };
 
   const updateActivity = (index: number, field: keyof ActivityItem, value: any) => {
@@ -332,8 +441,9 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
       youtube_urls: youtubeUrls,
       exercises: activities,
       assignment_required: assignmentRequired,
-      quiz_required: quizRequired,
+      quiz_required: quizRequired || Boolean(quizData?.questions?.length > 0),
       is_end_of_course: isEndOfCourse,
+      quiz_data: quizData,
     });
   };
 
@@ -494,11 +604,123 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                 Configure student interactive activities, code editors, debug challenges, or external tools.
               </p>
             </div>
-            <Button type="button" size="sm" onClick={addActivity} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs font-semibold">
-              <Plus className="w-3.5 h-3.5" />
-              Add Activity
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                type="button"
+                size="sm"
+                variant={previewMode ? "default" : "outline"}
+                onClick={() => setPreviewMode(!previewMode)}
+                className={`h-8 text-xs gap-1.5 ${previewMode ? "bg-purple-600 hover:bg-purple-700 text-white" : "border-purple-300 text-purple-700 dark:text-purple-300"}`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                {previewMode ? "Exit Preview" : "Student Preview Mode"}
+              </Button>
+
+              <Button type="button" size="sm" onClick={addActivity} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 h-8 text-xs font-semibold">
+                <Plus className="w-3.5 h-3.5" />
+                Add Blank
+              </Button>
+            </div>
           </div>
+
+          {/* Activity Presets Bar */}
+          {!previewMode && (
+            <div className="flex items-center gap-1.5 flex-wrap p-2 rounded-lg bg-background/80 border text-xs">
+              <span className="text-[11px] font-semibold text-muted-foreground mr-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                Quick Templates ({resolvedTitle || "Course"}):
+              </span>
+
+              {getSubjectQuickTemplates(resolvedTitle, resolvedCategory).map((tmpl) => (
+                <Button
+                  key={tmpl.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newItem = { ...tmpl.item, id: crypto.randomUUID() };
+                    setActivities((prev) => [...prev, newItem]);
+                    toast({ title: "Template Added", description: `Added "${newItem.title}" (+${newItem.xp_reward} XP)` });
+                  }}
+                  className={`h-6 text-[11px] px-2 gap-1 ${tmpl.colorClass}`}
+                >
+                  <Code2 className="w-3 h-3" />
+                  {tmpl.label}
+                </Button>
+              ))}
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setAiAssistantOpen(true)}
+                className="h-6 text-[11px] px-2.5 gap-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold shadow-xs ml-auto"
+              >
+                <Sparkles className="w-3 h-3 text-amber-300" />
+                ✨ AI Assistant (Activity + Quiz)
+              </Button>
+            </div>
+          )}
+
+          {/* Student Preview Mode Panel */}
+          {previewMode && (
+            <div className="p-4 rounded-xl border bg-background space-y-4 shadow-inner">
+              <div className="flex items-center justify-between pb-2 border-b">
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-purple-600 text-white font-semibold text-xs">
+                    Student Preview Mode Active
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    This is how students will experience these activities in the lesson viewer.
+                  </span>
+                </div>
+              </div>
+
+              {activities.length === 0 ? (
+                <p className="text-sm text-center py-6 text-muted-foreground">No activities added to preview yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {activities.map((act, idx) => (
+                    <div key={act.id || idx} className="p-4 rounded-lg border bg-card/60 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs font-semibold">
+                            Step {idx + 1}
+                          </Badge>
+                          <h4 className="text-sm font-bold text-foreground">{act.title}</h4>
+                          {act.is_assignment && (
+                            <Badge variant="destructive" className="text-[10px]">
+                              Tutor Review Required
+                            </Badge>
+                          )}
+                        </div>
+                        <Badge className="bg-amber-500/10 text-amber-700 border border-amber-500/30 text-xs font-bold gap-1">
+                          <Trophy className="w-3 h-3 fill-amber-500" />
+                          +{act.xp_reward || 40} XP
+                        </Badge>
+                      </div>
+
+                      {act.instructions && (
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                          {act.instructions}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-1 border-t">
+                        <span>IDE: <strong className="text-foreground font-mono">{act.editor_type}</strong></span>
+                        <span>Mode: <strong className="text-foreground">{act.project_mode}</strong></span>
+                        {act.hints && act.hints.length > 0 && (
+                          <span>💡 {act.hints.length} Hints Available</span>
+                        )}
+                        {act.sample_project_title && (
+                          <span>🎯 Target Model: {act.sample_project_title}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {activities.length === 0 && (
             <div className="text-center py-6 border border-dashed rounded-lg bg-background text-muted-foreground text-xs space-y-2">
@@ -690,13 +912,51 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
                   </div>
                 </div>
 
-                {/* 9. Sample Project / Outcome Preview (Image 3) */}
+                {/* 9. XP Reward Allocation */}
+                <div className="p-3 rounded-lg border bg-amber-500/5 border-amber-500/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                      <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                      9. Activity XP Reward
+                    </Label>
+                    <Badge variant="outline" className="text-xs font-bold text-amber-600 border-amber-400 bg-background">
+                      +{act.xp_reward || 40} XP
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[20, 30, 40, 50, 100].map(amt => (
+                      <Button
+                        key={amt}
+                        type="button"
+                        size="sm"
+                        variant={act.xp_reward === amt ? "default" : "outline"}
+                        className={`h-7 text-xs px-2.5 ${act.xp_reward === amt ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
+                        onClick={() => updateActivity(index, "xp_reward", amt)}
+                      >
+                        +{amt} XP
+                      </Button>
+                    ))}
+                    <div className="flex items-center gap-1 ml-auto">
+                      <span className="text-xs text-muted-foreground">Custom:</span>
+                      <Input
+                        type="number"
+                        min="5"
+                        max="500"
+                        value={act.xp_reward || 40}
+                        onChange={e => updateActivity(index, "xp_reward", Math.max(5, Number(e.target.value)))}
+                        className="h-7 w-20 text-xs text-right font-semibold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 10. Sample Project / Outcome Preview (Image 3) */}
                 <div className="space-y-3 pt-3 border-t">
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
-                        <span>9. Sample Project &amp; Expected Outcome Preview (Shown to students as target model)</span>
+                        <span>10. Sample Project &amp; Expected Outcome Preview (Shown to students as target model)</span>
                       </Label>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         Add a sample screenshot or video showing what the project should look like upon completion. Upload directly from your computer or paste a URL.
@@ -1130,7 +1390,20 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-lg border bg-background">
               <Label className="text-xs font-medium cursor-pointer">Quiz Required</Label>
-              <Switch checked={quizRequired} onCheckedChange={setQuizRequired} />
+              <Switch
+                checked={quizRequired || Boolean(quizData?.questions?.length > 0)}
+                onCheckedChange={(val) => {
+                  setQuizRequired(val);
+                  if (val && (!quizData || !quizData.questions)) {
+                    setQuizData({
+                      id: crypto.randomUUID(),
+                      title: `${title || "Lesson"} Quiz`,
+                      pass_percentage: 70,
+                      questions: [],
+                    });
+                  }
+                }}
+              />
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-lg border bg-background">
               <Label className="text-xs font-medium cursor-pointer">End of Course</Label>
@@ -1138,6 +1411,15 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
             </div>
           </div>
         </div>
+
+        {/* Section 5: Quiz Curator (Visual Quiz Editor) */}
+        {(quizRequired || Boolean(quizData?.questions?.length > 0)) && (
+          <QuizCurator
+            quizData={quizData}
+            onChange={setQuizData}
+            lessonTitle={title || "Lesson"}
+          />
+        )}
       </div>
 
       <DialogFooter className="pt-4 border-t gap-2">
@@ -1148,6 +1430,23 @@ export function LessonActivityDialog({ lesson, courseId, onSave, onCancel }: Les
           Save Lesson &amp; Activities
         </Button>
       </DialogFooter>
+
+      {/* AI Assistant Modal */}
+      <AIAssistantDialog
+        open={aiAssistantOpen}
+        onOpenChange={setAiAssistantOpen}
+        courseTitle={resolvedTitle || title || "STEM Course"}
+        category={resolvedCategory}
+        onApplyActivity={(newAct) => {
+          setActivities((prev) => [...prev, newAct]);
+          toast({ title: "AI Activity Added! 🚀", description: `Added "${newAct.title}" (+${newAct.xp_reward} XP)` });
+        }}
+        onApplyQuiz={(newQuiz) => {
+          setQuizData(newQuiz);
+          setQuizRequired(true);
+          toast({ title: "AI Quiz Generated! 🎯", description: `Added ${newQuiz.questions.length} questions to lesson quiz.` });
+        }}
+      />
     </DialogContent>
   );
 }

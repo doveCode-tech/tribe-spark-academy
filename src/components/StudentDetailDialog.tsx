@@ -331,8 +331,20 @@ export function StudentDetailDialog({
               </div>
             </div>
 
-            {/* Quick stats pill */}
-            <div className="flex items-center gap-2">
+            {/* Quick stats pill & Parent View */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                asChild
+                className="h-8 text-xs gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-300 font-semibold"
+                title="Open public/shareable parent progress report"
+              >
+                <a href={`/parent/${studentId}`} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Parent Report Card
+                </a>
+              </Button>
               <div className="px-3 py-1.5 rounded-lg bg-card border text-center shadow-xs">
                 <div className="text-xs text-muted-foreground">Courses</div>
                 <div className="text-sm font-bold text-foreground">{courses.length}</div>

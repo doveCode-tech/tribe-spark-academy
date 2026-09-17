@@ -55,7 +55,7 @@ export function LessonCard({
   const navigate = useNavigate();
   
   const handleViewLesson = () => {
-    navigate(`/lessons/${lesson.id}`);
+    navigate(`/lesson/${lesson.id}`);
   };
 
   return (

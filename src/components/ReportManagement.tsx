@@ -40,12 +40,14 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { FileText, Send, Check, X, Eye, Plus, Download, Edit, Filter, Calendar as CalendarIcon, ChevronDown, Sparkles } from "lucide-react";
+import { FileText, Send, Check, X, Eye, Plus, Download, Edit, Filter, Calendar as CalendarIcon, ChevronDown, Sparkles, MessageSquare } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { createNotification } from "@/utils/notifications";
 
 interface Report {
   id: string;
@@ -677,6 +679,17 @@ export function ReportManagement() {
         message: `Your report "${report.title}" has been ${status}${reviewComments ? ': ' + reviewComments : ''}`,
         data: { report_id: reportId, status, reviewer_comments: reviewComments }
       });
+
+      // Notify student when report is approved and published
+      if (status === 'approved' && report.student_id) {
+        createNotification({
+          recipientUserId: report.student_id,
+          type: 'report_published',
+          title: 'New Learning Report Published! 📊',
+          message: `Your progress report "${report.title}" has been published. Visit Reports to review your progress and tutor remarks.`,
+          data: { report_id: reportId, course_id: report.course_id }
+        }).catch((e) => console.warn("Failed to notify student of published report:", e));
+      }
 
       // Send email notification to tutor
       if (tutorData.email) {
@@ -1839,6 +1852,21 @@ export function ReportManagement() {
                       >
                         <Edit className="w-4 h-4 mr-2" />
                         Edit & Resubmit
+                      </Button>
+                    )}
+
+                    {report.student_id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        asChild
+                        className="border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300"
+                        title={`Direct chat with ${report.student_name || "student"}`}
+                      >
+                        <Link to={`/chat?user=${report.student_id}`}>
+                          <MessageSquare className="w-4 h-4 mr-1.5 text-purple-600" />
+                          Chat
+                        </Link>
                       </Button>
                     )}
                   </div>

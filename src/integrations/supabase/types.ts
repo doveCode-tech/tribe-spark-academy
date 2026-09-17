@@ -200,6 +200,103 @@ export type Database = {
         }
         Relationships: []
       }
+      class_sessions: {
+        Row: {
+          id: string
+          title: string
+          course_id: string
+          student_id: string | null
+          tutor_id: string | null
+          session_group: string | null
+          start_time: string
+          end_time: string
+          status: string
+          meeting_provider: string
+          meeting_link: string
+          meeting_id: string | null
+          passcode: string | null
+          host_key: string | null
+          claimed_at: string | null
+          terms_accepted_version: string | null
+          reminder_sent_at: string | null
+          reminder_sent_by: string | null
+          actual_ended_at: string | null
+          session_report_id: string | null
+          created_by: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          course_id: string
+          student_id?: string | null
+          tutor_id?: string | null
+          session_group?: string | null
+          start_time: string
+          end_time: string
+          status?: string
+          meeting_provider?: string
+          meeting_link?: string
+          meeting_id?: string | null
+          passcode?: string | null
+          host_key?: string | null
+          claimed_at?: string | null
+          terms_accepted_version?: string | null
+          reminder_sent_at?: string | null
+          reminder_sent_by?: string | null
+          actual_ended_at?: string | null
+          session_report_id?: string | null
+          created_by?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          course_id?: string
+          student_id?: string | null
+          tutor_id?: string | null
+          session_group?: string | null
+          start_time?: string
+          end_time?: string
+          status?: string
+          meeting_provider?: string
+          meeting_link?: string
+          meeting_id?: string | null
+          passcode?: string | null
+          host_key?: string | null
+          claimed_at?: string | null
+          terms_accepted_version?: string | null
+          reminder_sent_at?: string | null
+          reminder_sent_by?: string | null
+          actual_ended_at?: string | null
+          session_report_id?: string | null
+          created_by?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_sessions_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_sessions_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       code_templates: {
         Row: {
           course_id: string
@@ -664,6 +761,8 @@ export type Database = {
       }
       projects: {
         Row: {
+          activity_id: string | null
+          assigned_tutor_id: string | null
           code_content: string | null
           course_id: string | null
           description: string | null
@@ -677,13 +776,17 @@ export type Database = {
           lesson_id: string | null
           link: string | null
           portfolio_id: string | null
+          resubmission_requested: boolean | null
           review_status: string | null
           screenshot: string | null
           student_id: string | null
+          submission_history: Json | null
           submitted_at: string | null
           title: string | null
         }
         Insert: {
+          activity_id?: string | null
+          assigned_tutor_id?: string | null
           code_content?: string | null
           course_id?: string | null
           description?: string | null
@@ -697,13 +800,17 @@ export type Database = {
           lesson_id?: string | null
           link?: string | null
           portfolio_id?: string | null
+          resubmission_requested?: boolean | null
           review_status?: string | null
           screenshot?: string | null
           student_id?: string | null
+          submission_history?: Json | null
           submitted_at?: string | null
           title?: string | null
         }
         Update: {
+          activity_id?: string | null
+          assigned_tutor_id?: string | null
           code_content?: string | null
           course_id?: string | null
           description?: string | null
@@ -717,9 +824,11 @@ export type Database = {
           lesson_id?: string | null
           link?: string | null
           portfolio_id?: string | null
+          resubmission_requested?: boolean | null
           review_status?: string | null
           screenshot?: string | null
           student_id?: string | null
+          submission_history?: Json | null
           submitted_at?: string | null
           title?: string | null
         }
@@ -917,6 +1026,80 @@ export type Database = {
           },
         ]
       }
+      session_reports: {
+        Row: {
+          id: string
+          session_id: string
+          tutor_id: string
+          student_id: string | null
+          course_id: string | null
+          attendance_status: string
+          topics_covered: string
+          student_performance: number | null
+          homework_assigned: string | null
+          notes_for_parents: string | null
+          internal_notes: string | null
+          submitted_at: string | null
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          tutor_id: string
+          student_id?: string | null
+          course_id?: string | null
+          attendance_status?: string
+          topics_covered: string
+          student_performance?: number | null
+          homework_assigned?: string | null
+          notes_for_parents?: string | null
+          internal_notes?: string | null
+          submitted_at?: string | null
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          tutor_id?: string
+          student_id?: string | null
+          course_id?: string | null
+          attendance_status?: string
+          topics_covered?: string
+          student_performance?: number | null
+          homework_assigned?: string | null
+          notes_for_parents?: string | null
+          internal_notes?: string | null
+          submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_reports_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "class_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_reports_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_reports_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_reports_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_badges: {
         Row: {
           awarded_by: string | null
@@ -949,8 +1132,108 @@ export type Database = {
           },
         ]
       }
+      tutor_penalties: {
+        Row: {
+          id: string
+          tutor_id: string
+          session_id: string | null
+          penalty_type: string
+          reason: string
+          amount_adjusted: number | null
+          status: string
+          created_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          tutor_id: string
+          session_id?: string | null
+          penalty_type: string
+          reason: string
+          amount_adjusted?: number | null
+          status?: string
+          created_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          tutor_id?: string
+          session_id?: string | null
+          penalty_type?: string
+          reason?: string
+          amount_adjusted?: number | null
+          status?: string
+          created_at?: string | null
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_penalties_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tutor_penalties_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "class_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tutor_qualifications: {
+        Row: {
+          id: string
+          tutor_id: string
+          course_id: string
+          qualified_at: string | null
+          approved_by: string | null
+          source: string | null
+          notes: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tutor_id: string
+          course_id: string
+          qualified_at?: string | null
+          approved_by?: string | null
+          source?: string | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tutor_id?: string
+          course_id?: string
+          qualified_at?: string | null
+          approved_by?: string | null
+          source?: string | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_qualifications_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tutor_qualifications_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
+          age: number | null
           approved: boolean
           auth_user_id: string | null
           avatar_url: string | null
@@ -971,10 +1254,12 @@ export type Database = {
           report_required: boolean | null
           role: string | null
           role_level: number | null
+          subscription_type: string | null
           suspended: boolean | null
           username: string | null
         }
         Insert: {
+          age?: number | null
           approved?: boolean
           auth_user_id?: string | null
           avatar_url?: string | null
@@ -995,10 +1280,12 @@ export type Database = {
           report_required?: boolean | null
           role?: string | null
           role_level?: number | null
+          subscription_type?: string | null
           suspended?: boolean | null
           username?: string | null
         }
         Update: {
+          age?: number | null
           approved?: boolean
           auth_user_id?: string | null
           avatar_url?: string | null
@@ -1019,6 +1306,7 @@ export type Database = {
           report_required?: boolean | null
           role?: string | null
           role_level?: number | null
+          subscription_type?: string | null
           suspended?: boolean | null
           username?: string | null
         }

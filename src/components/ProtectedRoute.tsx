@@ -5,10 +5,11 @@ import { Loader } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'student' | 'tutor' | 'admin';
+  requiredRole?: 'student' | 'tutor' | 'ultimate_tutor' | 'admin';
+  allowedRoles?: Array<'student' | 'tutor' | 'ultimate_tutor' | 'admin'>;
 }
 
-export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requiredRole, allowedRoles }: ProtectedRouteProps) {
   const { user, userProfile, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -24,12 +25,19 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
         return;
       }
 
-      if (requiredRole && userProfile?.role !== requiredRole) {
+      const role = userProfile?.role as 'student' | 'tutor' | 'ultimate_tutor' | 'admin' | undefined;
+
+      if (requiredRole && role !== requiredRole) {
+        navigate('/unauthorized');
+        return;
+      }
+
+      if (allowedRoles && allowedRoles.length > 0 && (!role || !allowedRoles.includes(role))) {
         navigate('/unauthorized');
         return;
       }
     }
-  }, [user, userProfile, loading, navigate, requiredRole]);
+  }, [user, userProfile, loading, navigate, requiredRole, allowedRoles]);
 
   if (loading) {
     return (
@@ -50,7 +58,13 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     return null;
   }
 
-  if (requiredRole && userProfile?.role !== requiredRole) {
+  const role = userProfile?.role as 'student' | 'tutor' | 'ultimate_tutor' | 'admin' | undefined;
+
+  if (requiredRole && role !== requiredRole) {
+    return null;
+  }
+
+  if (allowedRoles && allowedRoles.length > 0 && (!role || !allowedRoles.includes(role))) {
     return null;
   }
 

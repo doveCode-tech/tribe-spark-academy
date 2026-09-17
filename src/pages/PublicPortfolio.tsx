@@ -4,8 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trophy, ExternalLink, Download, Code } from "lucide-react";
+import { Trophy, ExternalLink, Download, Code, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { resolveStudentIdentity } from "@/utils/identity";
+import { calculateLevel, fetchStudentXP } from "@/utils/gamification";
 
 export default function PublicPortfolio() {
   const { studentId } = useParams();
@@ -14,20 +16,26 @@ export default function PublicPortfolio() {
   const [portfolio, setPortfolio] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [badges, setBadges] = useState<any[]>([]);
+  const [totalXP, setTotalXP] = useState<number>(0);
 
   useEffect(() => {
     fetchPortfolio();
   }, [studentId]);
 
   const fetchPortfolio = async () => {
+    if (!studentId) return;
     try {
+      // Resolve both users.id and auth_user_id
+      const identity = await resolveStudentIdentity(studentId);
+      const studentIds = identity ? [identity.dbId, identity.authUserId] : [studentId];
+
       // Fetch portfolio
       const { data: portfolioData } = await supabase
         .from('portfolios')
         .select('*')
-        .eq('student_id', studentId)
+        .in('student_id', studentIds)
         .eq('is_public', true)
-        .single();
+        .maybeSingle();
 
       if (!portfolioData) {
         toast({
@@ -44,7 +52,7 @@ export default function PublicPortfolio() {
       const { data: projectsData } = await supabase
         .from('projects')
         .select('*')
-        .eq('student_id', studentId)
+        .in('student_id', studentIds)
         .eq('review_status', 'graded')
         .order('submitted_at', { ascending: false });
 
@@ -54,9 +62,13 @@ export default function PublicPortfolio() {
       const { data: badgesData } = await supabase
         .from('student_badges')
         .select('earned_at, badges(*)')
-        .eq('student_id', studentId);
+        .in('student_id', studentIds);
 
       setBadges(badgesData?.map(b => ({ ...b.badges, earned_at: b.earned_at })) || []);
+
+      // Fetch student XP
+      const xp = await fetchStudentXP(studentIds);
+      setTotalXP(xp);
     } catch (error) {
       console.error('Error fetching portfolio:', error);
     } finally {
@@ -87,14 +99,33 @@ export default function PublicPortfolio() {
     );
   }
 
+  const levelProgress = calculateLevel(totalXP);
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
-        <Card className="border-2" style={{ borderColor: portfolio.theme_color }}>
+        <Card className="border-2 shadow-card" style={{ borderColor: portfolio.theme_color }}>
           <CardHeader>
-            <CardTitle className="text-4xl">{portfolio.title}</CardTitle>
-            <p className="text-lg text-muted-foreground">{portfolio.description}</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 flex-wrap mb-2">
+                  <CardTitle className="text-4xl">{portfolio.title}</CardTitle>
+                  <Badge 
+                    className="text-white border-none font-semibold px-3 py-1 flex items-center gap-1.5 shadow-sm text-sm"
+                    style={{ backgroundColor: levelProgress.currentLevel.color }}
+                  >
+                    <span>{levelProgress.currentLevel.badge}</span>
+                    <span>Level {levelProgress.currentLevel.level}: {levelProgress.currentLevel.title}</span>
+                  </Badge>
+                  <Badge variant="outline" className="border-amber-400/50 bg-amber-50/70 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-bold px-2.5 py-1 flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                    <span>{totalXP} XP</span>
+                  </Badge>
+                </div>
+                <p className="text-lg text-muted-foreground">{portfolio.description}</p>
+              </div>
+            </div>
           </CardHeader>
         </Card>
 

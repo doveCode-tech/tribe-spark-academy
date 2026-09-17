@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Trophy, CheckCircle, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { getDualIdArray } from "@/utils/identity";
 
 interface CourseProgressTrackerProps {
   courseId: string;
@@ -11,7 +12,7 @@ interface CourseProgressTrackerProps {
 }
 
 export function CourseProgressTracker({ courseId, className = "" }: CourseProgressTrackerProps) {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [progress, setProgress] = useState({
     lessonsCompleted: 0,
     totalLessons: 0,
@@ -26,14 +27,13 @@ export function CourseProgressTracker({ courseId, className = "" }: CourseProgre
 
     // Real-time updates for lesson progress and quiz attempts
     const progressChannel = supabase
-      .channel('course-progress-changes')
+      .channel(`course-progress-changes-${courseId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'lesson_progress',
-          filter: `student_id=eq.${user?.id}`
+          table: 'lesson_progress'
         },
         () => fetchProgress()
       )
@@ -42,8 +42,7 @@ export function CourseProgressTracker({ courseId, className = "" }: CourseProgre
         {
           event: '*',
           schema: 'public',
-          table: 'quiz_attempts',
-          filter: `student_id=eq.${user?.id}`
+          table: 'quiz_attempts'
         },
         () => fetchProgress()
       )
@@ -52,7 +51,7 @@ export function CourseProgressTracker({ courseId, className = "" }: CourseProgre
     return () => {
       supabase.removeChannel(progressChannel);
     };
-  }, [courseId, user]);
+  }, [courseId, user, userProfile]);
 
   const fetchProgress = async () => {
     try {
@@ -65,24 +64,31 @@ export function CourseProgressTracker({ courseId, className = "" }: CourseProgre
       if (lessonsError) throw lessonsError;
 
       const totalLessons = lessonsData?.length || 0;
+      const courseLessonIdSet = new Set((lessonsData || []).map((l) => l.id));
 
-      // Get completed lessons
+      const studentIds = getDualIdArray(userProfile);
+      const studentIdList = studentIds.length > 0 ? studentIds : [user?.id].filter(Boolean);
+
+      // Get completed lessons strictly belonging to this course
       const { data: progressData, error: progressError } = await supabase
         .from('lesson_progress')
         .select('lesson_id, completed')
-        .eq('student_id', user?.id)
+        .in('student_id', studentIdList)
         .eq('completed', true);
 
       if (progressError) throw progressError;
 
-      const lessonsCompleted = progressData?.length || 0;
+      // Filter progress strictly to this course's lessons
+      const lessonsCompleted = progressData
+        ? progressData.filter((p) => courseLessonIdSet.has(p.lesson_id)).length
+        : 0;
 
-      // Check quiz completion
+      // Check quiz completion for this course
       const { data: quizData, error: quizError } = await supabase
         .from('quiz_attempts')
         .select('passed')
         .eq('course_id', courseId)
-        .eq('student_id', user?.id)
+        .in('student_id', studentIdList)
         .eq('passed', true)
         .limit(1);
 

@@ -28,8 +28,9 @@ import Lessons from "./pages/Lessons";
 import TutorCourseDetail from "./pages/TutorCourseDetail";
 import PublicPortfolio from "./pages/PublicPortfolio";
 import LessonGradingPage from "./pages/LessonGradingPage";
-
-
+import Unauthorized from "./pages/Unauthorized";
+import StudyCalendarPage from "./pages/StudyCalendarPage";
+import ParentStudentView from "./pages/ParentStudentView";
 
 const App = () => (
   <TooltipProvider>
@@ -42,9 +43,15 @@ const App = () => (
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pending-approval" element={<PendingApproval />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
           <Route path="/" element={
             <ProtectedRoute>
               <Index />
+            </ProtectedRoute>
+          } />
+          <Route path="/calendar" element={
+            <ProtectedRoute>
+              <StudyCalendarPage />
             </ProtectedRoute>
           } />
           <Route path="/courses" element={
@@ -83,22 +90,22 @@ const App = () => (
             </ProtectedRoute>
           } />
           <Route path="/analytics" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'ultimate_tutor']}>
               <Analytics />
             </ProtectedRoute>
           } />
           <Route path="/users" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'ultimate_tutor']}>
               <Users />
             </ProtectedRoute>
           } />
           <Route path="/settings" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'ultimate_tutor']}>
               <Settings />
             </ProtectedRoute>
           } />
           <Route path="/create-tutor" element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="admin">
               <CreateTutor />
             </ProtectedRoute>
           } />
@@ -113,32 +120,34 @@ const App = () => (
             </ProtectedRoute>
           } />
           <Route path="/lessons/:courseId" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'tutor', 'ultimate_tutor']}>
               <Lessons />
             </ProtectedRoute>
           } />
           <Route path="/tutor/course/:courseId" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'tutor', 'ultimate_tutor']}>
               <TutorCourseDetail />
             </ProtectedRoute>
           } />
           <Route path="/courses/:courseId/lessons/:lessonId/grading" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'tutor', 'ultimate_tutor']}>
               <LessonGradingPage />
             </ProtectedRoute>
           } />
           <Route path="/courses/:courseId/lessons/:lessonId/submissions" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'tutor', 'ultimate_tutor']}>
               <LessonGradingPage />
             </ProtectedRoute>
           } />
           <Route path="/grading/:courseId/:lessonId" element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'tutor', 'ultimate_tutor']}>
               <LessonGradingPage />
             </ProtectedRoute>
           } />
           <Route path="/portfolio/student/:studentId" element={<PublicPortfolio />} />
           <Route path="/portfolio/:studentId" element={<PublicPortfolio />} />
+          <Route path="/parent/:studentId" element={<ParentStudentView />} />
+          <Route path="/parent-view/:studentId" element={<ParentStudentView />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

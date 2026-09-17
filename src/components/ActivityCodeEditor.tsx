@@ -41,6 +41,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
+import { awardXP } from "@/utils/gamification";
+import { executePython } from "@/utils/pythonRunner";
 
 export type EditorType =
   | "monaco_html"
@@ -78,6 +80,7 @@ export interface Exercise {
   starter_code?: string;
   solution_code?: string;
   is_assignment?: boolean;
+  xp_reward?: number;
   hints?: ExerciseHint[];
   sample_project_title?: string;
   sample_project_description?: string;
@@ -91,6 +94,7 @@ interface ActivityCodeEditorProps {
   lessonId: string;
   courseId: string;
   isAssignment?: boolean;
+  onActivityComplete?: (xp: number) => void;
 }
 
 // ── File tab types ───────────────────────────────────────────────────────────
@@ -368,80 +372,8 @@ function buildJsOutput(code: string, files?: FileTab[]): string {
 }
 
 function buildPythonOutput(currentCode: string, allFiles: FileTab[]): string {
-  // Support multi-file Python: student can define modules in file2.py and 'import file2' or 'from file2 import ...'
-  const pythonFiles = allFiles.filter(f => f.name.endsWith(".py") || f.language === "python");
-  const moduleMap: Record<string, string> = {};
-
-  pythonFiles.forEach(f => {
-    const modName = f.name.replace(/\.py$/i, "");
-    moduleMap[modName] = f.content;
-  });
-
-  // Check imports in current code
-  let combinedCode = currentCode;
-  const lines = currentCode.split("\n");
-  const outputs: string[] = [];
-  let hasError = false;
-  let errorMsg = "";
-
-  // Inline imported module definitions so functions and variables are available
-  const inlinedModules: string[] = [];
-  lines.forEach(line => {
-    const impMatch = line.match(/^\s*(?:import\s+([\w_]+)|from\s+([\w_]+)\s+import\s+(.+))/);
-    if (impMatch) {
-      const mod = impMatch[1] || impMatch[2];
-      if (moduleMap[mod] && !inlinedModules.includes(mod)) {
-        inlinedModules.push(mod);
-      }
-    }
-  });
-
-  if (inlinedModules.length > 0) {
-    const modulePrefix = inlinedModules.map(m => `# --- Module: ${m} ---\n${moduleMap[m]}`).join("\n\n");
-    combinedCode = `${modulePrefix}\n\n# --- Main Program ---\n${currentCode}`;
-  }
-
-  // Syntax & Error checks
-  const syntaxChecks = [
-    { re: /if\s+\w+\s*=[^=]/, msg: "SyntaxError: invalid syntax (did you mean == instead of =?)" },
-    { re: /^\s*def\s+\w+[^(]/, msg: "SyntaxError: missing parentheses in function definition" },
-  ];
-  for (const chk of syntaxChecks) {
-    if (chk.re.test(currentCode)) {
-      hasError = true;
-      errorMsg = chk.msg;
-      break;
-    }
-  }
-
-  // Parse simulated print outputs and variable resolutions across combined code
-  if (!hasError) {
-    const allLines = combinedCode.split("\n");
-    for (const line of allLines) {
-      const m = line.match(/^\s*print\s*\((.+)\)\s*$/);
-      if (m) {
-        const inner = m[1].trim().replace(/^['"`]|['"`]$/g, "").replace(/f['"](.+)['"]/, "$1");
-        outputs.push(inner);
-      }
-    }
-    if (outputs.length === 0) {
-      outputs.push("Program executed with 0 errors.");
-    }
-  }
-
-  const display = hasError
-    ? `<span style="color:#f87171">❌ ${errorMsg}</span>`
-    : outputs.map((o) => `<div>&gt; ${o}</div>`).join("");
-
-  return `<!DOCTYPE html><html><head><style>
-    body { font-family: 'Consolas', monospace; font-size: 13px; background: #0f172a; color: #4ade80; padding: 16px; margin: 0; }
-    .header { color: #94a3b8; margin-bottom: 12px; font-size: 11px; }
-    .imported { color: #38bdf8; font-size: 11px; margin-bottom: 8px; }
-  </style></head><body>
-  <div class="header">▶ Python 3.x Environment (STEMTribe)</div>
-  ${inlinedModules.length > 0 ? `<div class="imported">📦 Loaded modules: ${inlinedModules.join(", ")}.py</div>` : ""}
-  <div>${display}</div>
-</body></html>`;
+  const result = executePython(currentCode, allFiles);
+  return result.htmlOutput;
 }
 
 // ── Video helper for short video clips & hints ─────────────────────────────
@@ -485,6 +417,7 @@ export function ActivityCodeEditor({
   lessonId,
   courseId,
   isAssignment,
+  onActivityComplete,
 }: ActivityCodeEditorProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
@@ -719,28 +652,27 @@ export function ActivityCodeEditor({
     setPreviewSrc(src);
     setPreviewOpen(true);
 
-    // Give iframe a tick to mount then write
-    setTimeout(() => {
+    const writeToIframe = () => {
       if (!iframeRef.current) return;
-      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
-      if (!doc) return;
-      doc.open();
-      doc.write(src);
-      doc.close();
-    }, 60);
+      try {
+        const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+        if (doc) {
+          doc.open();
+          doc.write(src);
+          doc.close();
+        }
+      } catch (err) {
+        console.warn("Direct iframe write:", err);
+      }
+    };
+
+    setTimeout(writeToIframe, 40);
+    setTimeout(writeToIframe, 140);
   };
 
-  // ── Rerun (refresh iframe) ────────────────────────────────────────────────────
+  // ── Rerun (refresh iframe with latest code) ───────────────────────────────────
   const handleRerun = () => {
-    if (!previewSrc) return handleRun();
-    setTimeout(() => {
-      if (!iframeRef.current) return;
-      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
-      if (!doc) return;
-      doc.open();
-      doc.write(previewSrc);
-      doc.close();
-    }, 60);
+    handleRun();
   };
 
   // ── Auto-run: debounced execution on code change ─────────────────────────────
@@ -827,6 +759,18 @@ export function ActivityCodeEditor({
       });
 
       if (!rpcErr && rpcRes) {
+        // Record streak learning activity
+        try {
+          await (supabase.rpc as any)("record_learning_activity", {
+            _activity_type: "project_submit",
+            _course_id: courseId,
+            _lesson_id: lessonId || null,
+            _points: 3,
+          });
+        } catch (actErr) {
+          console.warn("Learning activity record note:", actErr);
+        }
+
         // Notify tutors and admins
         supabase.functions.invoke("notify-project-submission", {
           body: {
@@ -1003,6 +947,17 @@ export function ActivityCodeEditor({
       });
 
       soundEffects.playSuccess();
+
+      // Award XP for activity submission
+      const xpToAward = exercise.xp_reward || (isAssignment ? 100 : 40);
+      try {
+        await awardXP(userProfile, xpToAward, `Completed activity: ${exercise.title || "Coding Challenge"}`, lessonId);
+      } catch (xpErr) {
+        console.warn("XP award note:", xpErr);
+      }
+
+      onActivityComplete?.(xpToAward);
+
       createNotification({
         recipientRole: "tutor",
         type: "activity_submitted",
@@ -1011,7 +966,7 @@ export function ActivityCodeEditor({
         data: { course_id: courseId, lesson_id: lessonId },
       });
       toast({
-        title: "🚀 Submitted to Tutor!",
+        title: `🚀 Submitted to Tutor! (+${xpToAward} XP)`,
         description: "Your work has been submitted for review. Your tutor and admin can see your code now!",
       });
     } catch (err: any) {
@@ -1724,6 +1679,7 @@ export function ActivityCodeEditor({
             </div>
             <iframe
               ref={iframeRef}
+              srcDoc={previewSrc || undefined}
               title="Execution Output"
               className="flex-1 w-full bg-white border-0"
               sandbox="allow-scripts allow-modals allow-same-origin"

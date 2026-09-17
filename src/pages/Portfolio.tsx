@@ -4,13 +4,40 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ExternalLink, Github, Code, Calendar, FileText, Trophy } from "lucide-react";
+import { ExternalLink, Github, Code, Calendar, FileText, Trophy, Zap } from "lucide-react";
 import { SharePortfolioButton } from "@/components/SharePortfolioButton";
 import { ProjectCodeViewer } from "@/components/ProjectCodeViewer";
 import { CertificateViewer } from "@/components/CertificateViewer";
+import { GitHubPushDialog } from "@/components/GitHubPushDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getDualIdArray } from "@/utils/identity";
+import { calculateLevel, fetchStudentXP } from "@/utils/gamification";
+
+function ProjectThumbnail({ screenshot, title, editorType }: { screenshot?: string; title: string; editorType?: string }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (screenshot && !hasError) {
+    return (
+      <img 
+        src={screenshot} 
+        alt={title}
+        onError={() => setHasError(true)}
+        className="w-20 h-20 rounded-xl object-cover bg-muted border border-border shrink-0"
+      />
+    );
+  }
+
+  return (
+    <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-indigo-500/15 via-purple-500/15 to-pink-500/15 border border-purple-500/30 flex flex-col items-center justify-center shrink-0 text-purple-600 shadow-xs">
+      <Code className="w-7 h-7 text-purple-600" />
+      <span className="text-[9px] font-bold mt-1 uppercase tracking-wider text-purple-700 dark:text-purple-300">
+        {editorType?.replace("monaco_", "") || "Capstone"}
+      </span>
+    </div>
+  );
+}
 
 const Portfolio = () => {
   const { userProfile } = useAuth();
@@ -22,6 +49,9 @@ const Portfolio = () => {
   const [selectedCertificate, setSelectedCertificate] = useState<string | null>(null);
   const [showCodeViewer, setShowCodeViewer] = useState(false);
   const [showCertViewer, setShowCertViewer] = useState(false);
+  const [githubTargetProject, setGithubTargetProject] = useState<any>(null);
+  const [showGithubModal, setShowGithubModal] = useState(false);
+  const [totalXP, setTotalXP] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,11 +62,14 @@ const Portfolio = () => {
 
   const fetchPortfolioData = async () => {
     try {
-      // Fetch graded projects only
+      const studentIds = getDualIdArray(userProfile);
+      if (studentIds.length === 0) return;
+
+      // Fetch graded projects matching either users.id or auth_user_id
       const { data: projectsData } = await supabase
         .from('projects')
         .select('*')
-        .eq('student_id', userProfile?.auth_user_id)
+        .in('student_id', studentIds)
         .eq('review_status', 'graded')
         .order('submitted_at', { ascending: false });
 
@@ -45,19 +78,27 @@ const Portfolio = () => {
       // Fetch badges
       const { data: badgesData } = await supabase
         .from('student_badges')
-        .select('earned_at, badges(*)')
-        .eq('student_id', userProfile?.auth_user_id);
+        .select('earned_at, badge_id, badges(*)')
+        .in('student_id', studentIds);
 
-      setBadges(badgesData?.map(b => ({ ...b.badges, earned_at: b.earned_at })) || []);
+      setBadges(
+        badgesData
+          ?.filter((b: any) => b.badges && b.badges.id)
+          .map((b: any) => ({ ...b.badges, earned_at: b.earned_at })) || []
+      );
 
       // Fetch certificates
       const { data: certificatesData } = await supabase
         .from('certificates')
         .select('*')
-        .eq('student_id', userProfile?.auth_user_id)
+        .in('student_id', studentIds)
         .order('issued_at', { ascending: false });
 
       setCertificates(certificatesData || []);
+
+      // Fetch student XP
+      const xp = await fetchStudentXP(userProfile);
+      setTotalXP(xp);
     } catch (error) {
       console.error('Error fetching portfolio data:', error);
       toast({
@@ -80,6 +121,8 @@ const Portfolio = () => {
     );
   }
   
+  const levelProgress = calculateLevel(totalXP);
+
   return (
     <LMSLayout>
       <div className="space-y-6">
@@ -95,9 +138,22 @@ const Portfolio = () => {
               </Avatar>
               
               <div className="flex-1">
-                <h1 className="text-3xl font-bold mb-2">
-                  {userProfile?.name || 'Student Portfolio'}
-                </h1>
+                <div className="flex items-center gap-3 flex-wrap mb-2">
+                  <h1 className="text-3xl font-bold">
+                    {userProfile?.name || 'Student Portfolio'}
+                  </h1>
+                  <Badge 
+                    className="text-white border-none font-semibold px-3 py-1 flex items-center gap-1.5 shadow-sm text-sm"
+                    style={{ backgroundColor: levelProgress.currentLevel.color }}
+                  >
+                    <span>{levelProgress.currentLevel.badge}</span>
+                    <span>Level {levelProgress.currentLevel.level}: {levelProgress.currentLevel.title}</span>
+                  </Badge>
+                  <Badge variant="outline" className="border-amber-400/50 bg-amber-50/70 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-bold px-2.5 py-1 flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                    <span>{totalXP} XP</span>
+                  </Badge>
+                </div>
                 <p className="text-muted-foreground mb-4">
                   {userProfile?.bio || 'Passionate young coder exploring the exciting world of programming, robotics, and creative technology.'}
                 </p>
@@ -106,6 +162,10 @@ const Portfolio = () => {
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     Joined {new Date(userProfile?.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                    <Zap className="w-4 h-4 fill-amber-500 text-amber-500" />
+                    {totalXP} Total XP
                   </div>
                   <div>
                     {certificates.length} Certificates Earned
@@ -152,13 +212,11 @@ const Portfolio = () => {
                   projects.map((project) => (
                     <div key={project.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-start gap-4">
-                        {project.screenshot && (
-                          <img 
-                            src={project.screenshot} 
-                            alt={project.title}
-                            className="w-20 h-20 rounded-lg object-cover bg-muted"
-                          />
-                        )}
+                        <ProjectThumbnail
+                          screenshot={project.screenshot}
+                          title={project.title}
+                          editorType={project.editor_type}
+                        />
                         
                         <div className="flex-1">
                           <div className="flex items-start justify-between mb-2">
@@ -186,7 +244,7 @@ const Portfolio = () => {
                             </div>
                           )}
                           
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             {project.link && (
                               <Button 
                                 variant="outline" 
@@ -208,19 +266,28 @@ const Portfolio = () => {
                               <Code className="w-4 h-4 mr-1" />
                               Code
                             </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => {
-                                toast({
-                                  title: "GitHub Integration",
-                                  description: "Push to GitHub feature coming soon!",
-                                });
-                              }}
-                            >
-                              <Github className="w-4 h-4 mr-1" />
-                              GitHub
-                            </Button>
+                            {Boolean(
+                              project.is_capstone ||
+                              project.is_assignment ||
+                              project.type === "assignment" ||
+                              project.type === "capstone" ||
+                              project.title?.toLowerCase().includes("capstone") ||
+                              project.title?.toLowerCase().includes("final") ||
+                              (project.grade !== null && project.grade !== undefined)
+                            ) && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  setGithubTargetProject(project);
+                                  setShowGithubModal(true);
+                                }}
+                                className="border-slate-700 text-slate-800 dark:border-slate-300 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 gap-1 font-semibold"
+                              >
+                                <Github className="w-4 h-4 mr-1" />
+                                Push to GitHub
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -305,12 +372,24 @@ const Portfolio = () => {
         project={selectedProject}
         open={showCodeViewer}
         onOpenChange={setShowCodeViewer}
+        onPushToGithub={(proj) => {
+          setShowCodeViewer(false);
+          setGithubTargetProject(proj);
+          setShowGithubModal(true);
+        }}
       />
 
       <CertificateViewer
         certificateId={selectedCertificate}
         open={showCertViewer}
         onOpenChange={setShowCertViewer}
+      />
+
+      <GitHubPushDialog
+        open={showGithubModal}
+        onOpenChange={setShowGithubModal}
+        project={githubTargetProject}
+        studentName={userProfile?.name}
       />
     </LMSLayout>
   );

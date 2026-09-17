@@ -45,11 +45,13 @@ import {
   Save,
   HelpCircle,
   Settings as SettingsIcon,
+  MessageSquare,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
+import { awardXP, XP_REWARDS } from "@/utils/gamification";
 import { fetchUserDirectory } from "@/utils/studentDirectory";
 import { StudentDetailDialog } from "@/components/StudentDetailDialog";
 
@@ -435,6 +437,25 @@ export default function LessonGradingPage() {
     return filtered;
   }, [submissions, unsubmittedStudents, statusFilter, searchQuery, firstNameFilter, lastNameFilter]);
 
+  const QUICK_GRADE_PRESETS = [
+    { grade: "100", label: "100% Outstanding", feedback: "Outstanding project submission! Flawless execution and clear STEM logic." },
+    { grade: "90", label: "90% Excellent", feedback: "Excellent job! Well-structured solution demonstrating strong problem solving." },
+    { grade: "80", label: "80% Good", feedback: "Good effort! The project meets key requirements with good attention to detail." },
+    { grade: "70", label: "70% Passing", feedback: "Passing submission. Solid foundation, keep refining your code and designs!" },
+  ];
+
+  const handleApplyQuickGrade = (submissionId: string, preset: typeof QUICK_GRADE_PRESETS[0]) => {
+    const current = gradingValues[submissionId] || { grade: "", feedback: "" };
+    setDraft(submissionId, {
+      grade: preset.grade,
+      feedback: current.feedback.trim() ? current.feedback : preset.feedback
+    });
+    toast({
+      title: `Preset Applied: ${preset.label}`,
+      description: `Set grade to ${preset.grade}% with supportive tutor feedback.`
+    });
+  };
+
   // Save Grade Handler
   const handleSaveGrade = async (submissionId: string) => {
     const values = gradingValues[submissionId];
@@ -467,17 +488,50 @@ export default function LessonGradingPage() {
       soundEffects.playSuccess();
       toast({ title: "Grade Saved!", description: `Assigned ${numGrade}% to student.` });
 
-      // Notify student
+      // Notify student and award +150 XP bonus if passing (>= 70%)
       const sub = submissions.find((s) => s.id === submissionId);
       const studentAuthId = sub?.student?.auth_user_id || sub?.student_id;
+      
+      let earnedBonusXP = false;
+      if (studentAuthId && numGrade >= 70) {
+        try {
+          const xpRes = await awardXP(
+            studentAuthId,
+            XP_REWARDS.PROJECT_GRADED_BONUS,
+            `Passed project assignment: ${sub?.title || lesson?.title || "Project"} (${numGrade}%)`,
+            submissionId
+          );
+          if (xpRes.success) earnedBonusXP = true;
+        } catch (xpErr) {
+          console.warn("Could not award project bonus XP:", xpErr);
+        }
+      }
+
       if (studentAuthId && autoNotify) {
+        const xpNotice = earnedBonusXP ? ` 🎉 You earned a +${XP_REWARDS.PROJECT_GRADED_BONUS} XP bonus!` : "";
         createNotification({
           recipientUserId: studentAuthId,
           type: "project_graded",
           title: `Project Graded: ${sub?.title || lesson?.title || "Assignment"}`,
-          message: `Your project has been graded: ${numGrade}/100.${values.feedback ? ` Feedback: ${values.feedback}` : ""}`,
-          data: { course_id: courseId, lesson_id: lessonId, project_id: submissionId },
+          message: `Your project has been graded: ${numGrade}/100.${xpNotice}${values.feedback ? ` Tutor Feedback: ${values.feedback}` : ""}`,
+          data: { course_id: courseId, lesson_id: lessonId, project_id: submissionId, grade: numGrade, earned_bonus_xp: earnedBonusXP },
         }).catch((e) => console.warn(e));
+      }
+
+      // Mark lesson_progress completed = true so next lesson unlocks
+      if (studentAuthId && lessonId) {
+        try {
+          await supabase
+            .from("lesson_progress")
+            .upsert({
+              student_id: studentAuthId,
+              lesson_id: lessonId,
+              completed: true,
+              completed_at: new Date().toISOString(),
+            });
+        } catch (progErr) {
+          console.warn("Could not upsert lesson_progress:", progErr);
+        }
       }
 
       // Update local state
@@ -530,6 +584,22 @@ export default function LessonGradingPage() {
 
       const sub = submissions.find((s) => s.id === submissionId);
       const studentAuthId = sub?.student?.auth_user_id || sub?.student_id;
+
+      // Revert lesson_progress completed = false
+      if (studentAuthId && lessonId) {
+        try {
+          await supabase
+            .from("lesson_progress")
+            .upsert({
+              student_id: studentAuthId,
+              lesson_id: lessonId,
+              completed: false,
+              completed_at: null,
+            });
+        } catch (progErr) {
+          console.warn("Could not revert lesson_progress:", progErr);
+        }
+      }
       if (studentAuthId && autoNotify) {
         createNotification({
           recipientUserId: studentAuthId,
@@ -1154,6 +1224,20 @@ export default function LessonGradingPage() {
                                         View Submission
                                       </Button>
 
+                                      {/* Direct Chat Shortcut */}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        asChild
+                                        className="h-7 text-xs px-2 gap-1 border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50"
+                                        title={`Direct chat with ${st.name || "student"}`}
+                                      >
+                                        <Link to={`/chat?user=${st.auth_user_id || st.id}`}>
+                                          <MessageSquare className="w-3.5 h-3.5 text-purple-600" />
+                                          Chat
+                                        </Link>
+                                      </Button>
+
                                       {/* External Link */}
                                       {sub.link && (
                                         <a
@@ -1193,7 +1277,21 @@ export default function LessonGradingPage() {
                                     )}
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground text-[11px]">No submission yet</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground text-[11px]">No submission yet</span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      asChild
+                                      className="h-6 text-[11px] px-2 gap-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                                      title={`Message ${st.name || "student"} on Live Chat`}
+                                    >
+                                      <Link to={`/chat?user=${st.auth_user_id || st.id}`}>
+                                        <MessageSquare className="w-3 h-3" />
+                                        Remind
+                                      </Link>
+                                    </Button>
+                                  </div>
                                 )}
                               </td>
 
@@ -1714,15 +1812,29 @@ export default function LessonGradingPage() {
                       : "recently"}
                   </DialogDescription>
                 </div>
-                {viewSubmission?.review_status === "graded" ? (
-                  <Badge className="bg-emerald-600 text-white text-xs">
-                    Graded: {viewSubmission.grade}%
-                  </Badge>
-                ) : (
-                  <Badge className="bg-amber-500 text-white text-xs">
-                    Pending Review
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    asChild
+                    className="h-7 text-xs px-2.5 gap-1.5 bg-white/10 hover:bg-white/20 text-white border-purple-300/40"
+                    title="Open direct live chat with this student"
+                  >
+                    <Link to={`/chat?user=${viewSubmission?.student?.auth_user_id || viewSubmission?.student?.id || viewSubmission?.student_id}`}>
+                      <MessageSquare className="w-3.5 h-3.5 text-purple-200" />
+                      Chat with Student
+                    </Link>
+                  </Button>
+                  {viewSubmission?.review_status === "graded" ? (
+                    <Badge className="bg-emerald-600 text-white text-xs">
+                      Graded: {viewSubmission.grade}%
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-amber-500 text-white text-xs">
+                      Pending Review
+                    </Badge>
+                  )}
+                </div>
               </div>
             </DialogHeader>
 
@@ -1858,9 +1970,27 @@ export default function LessonGradingPage() {
 
               {/* Quick Grading Form in Modal */}
               <div className="p-4 border rounded-lg bg-purple-50/50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 space-y-3">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-purple-900 dark:text-purple-200">
-                  Grade This Submission
-                </h4>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    Grade This Submission
+                  </h4>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-[11px] font-semibold text-muted-foreground mr-1">Quick Presets:</span>
+                    {QUICK_GRADE_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.grade}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => viewSubmission && handleApplyQuickGrade(viewSubmission.id, preset)}
+                        className="h-6 px-2 text-[10px] font-medium border-purple-200 hover:border-purple-400 hover:bg-purple-100 dark:border-purple-700 dark:hover:bg-purple-900"
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex items-center gap-3">
                   <div className="w-32">
                     <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
@@ -1917,6 +2047,12 @@ export default function LessonGradingPage() {
                     )}
                   </div>
                 </div>
+                {viewSubmission && parseInt(gradingValues[viewSubmission.id]?.grade || "0", 10) >= 70 && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium pt-1">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Passing grade (≥70%) awards student a +150 XP bonus!
+                  </div>
+                )}
               </div>
             </div>
           </DialogContent>

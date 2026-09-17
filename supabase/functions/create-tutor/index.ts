@@ -23,6 +23,38 @@ serve(async (req) => {
       }
     );
 
+    // Verify caller authentication and admin authorization
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user: callerUser }, error: tokenError } = await supabaseAdmin.auth.getUser(token);
+    if (tokenError || !callerUser) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Invalid authentication token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify caller has admin role
+    const { data: callerProfile, error: profileCheckError } = await supabaseAdmin
+      .from("users")
+      .select("role")
+      .eq("auth_user_id", callerUser.id)
+      .single();
+
+    if (profileCheckError || callerProfile?.role !== "admin") {
+      return new Response(
+        JSON.stringify({ error: "Forbidden: Only administrators can create tutors" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { name, email, subjects, bio } = await req.json();
 
     if (!name || !email) {

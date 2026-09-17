@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, FileText, Upload, X, Save, Mail, Award, Edit, Eye } from "lucide-react";
+import { Search, FileText, Upload, X, Save, Mail, Award, Edit, Eye, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -535,6 +535,22 @@ export function StudentsList() {
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     View Details
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    asChild
+                    className="border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 font-medium"
+                    title={`View official parent report card for ${getStudentDisplayName(student)}`}
+                  >
+                    <a
+                      href={`/parent/${student.auth_user_id || student.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                      Parent View
+                    </a>
                   </Button>
                   {isTutor && (
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

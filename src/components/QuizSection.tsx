@@ -6,13 +6,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { QuizInterface } from './QuizInterface';
 import { useToast } from '@/hooks/use-toast';
+import { awardXP, XP_REWARDS } from '@/utils/gamification';
+
+import { getDualIdArray } from '@/utils/identity';
 
 interface QuizSectionProps {
   courseId: string;
 }
 
 export function QuizSection({ courseId }: QuizSectionProps) {
-  const { userProfile } = useAuth();
+  const { userProfile, user } = useAuth();
   const { toast } = useToast();
   const [quiz, setQuiz] = useState<any>(null);
   const [showQuiz, setShowQuiz] = useState(false);
@@ -22,20 +25,42 @@ export function QuizSection({ courseId }: QuizSectionProps) {
   useEffect(() => {
     fetchQuiz();
     checkQuizStatus();
-  }, [courseId]);
+  }, [courseId, userProfile]);
 
   const fetchQuiz = async () => {
     try {
-      const { data, error } = await supabase
+      // 1. Try from quizzes table
+      const { data: qData } = await supabase
         .from('quizzes')
         .select('*')
         .eq('course_id', courseId)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
-      setQuiz(data);
+      if (qData && qData.questions && qData.questions.length > 0) {
+        setQuiz(qData);
+        return;
+      }
+
+      // 2. Try from lessons quiz_data in this course
+      const { data: lessonData } = await supabase
+        .from('lessons')
+        .select('quiz_data')
+        .eq('course_id', courseId)
+        .not('quiz_data', 'is', null)
+        .limit(1);
+
+      if (lessonData && lessonData.length > 0 && lessonData[0].quiz_data) {
+        const qd = lessonData[0].quiz_data;
+        setQuiz({
+          id: qd.id || `quiz_${courseId}`,
+          title: qd.title || "Course Quiz",
+          pass_percentage: qd.pass_percentage || 70,
+          course_id: courseId,
+          questions: qd.questions || [],
+        });
+      }
     } catch (error) {
-      console.error('Error fetching quiz:', error);
+      console.warn('Error fetching quiz:', error);
     } finally {
       setLoading(false);
     }
@@ -43,17 +68,20 @@ export function QuizSection({ courseId }: QuizSectionProps) {
 
   const checkQuizStatus = async () => {
     try {
+      const studentIds = getDualIdArray(userProfile);
+      const studentIdList = studentIds.length > 0 ? studentIds : [userProfile?.auth_user_id, user?.id].filter(Boolean);
+
       const { data } = await supabase
         .from('quiz_attempts')
         .select('passed')
         .eq('course_id', courseId)
-        .eq('student_id', userProfile?.auth_user_id)
+        .in('student_id', studentIdList)
         .eq('passed', true)
         .limit(1);
 
       setQuizPassed((data?.length || 0) > 0);
     } catch (error) {
-      console.error('Error checking quiz status:', error);
+      console.warn('Error checking quiz status:', error);
     }
   };
 
@@ -61,28 +89,32 @@ export function QuizSection({ courseId }: QuizSectionProps) {
     if (passed) {
       setQuizPassed(true);
       
-      // Award course completion badge
+      // Award course completion badge via secure milestone RPC
       try {
-        // Check if a course completion badge exists
-        const { data: badge } = await supabase
-          .from('badges')
-          .select('id')
-          .eq('name', 'Course Completion')
-          .limit(1);
+        const { data: badgeRes } = await (supabase.rpc as any)('award_milestone_badge', {
+          _badge_name: 'Course Completion',
+          _student_id: userProfile?.auth_user_id
+        });
 
-        if (badge && badge.length > 0) {
-          await supabase.rpc('award_badge', {
-            _student_id: userProfile?.auth_user_id,
-            _badge_id: badge[0].id
-          });
-
+        if (badgeRes?.awarded) {
           toast({
             title: "Badge Earned! 🏆",
             description: "You've been awarded the Course Completion badge!",
           });
         }
       } catch (error) {
-        console.error('Error awarding badge:', error);
+        console.warn('Milestone badge note:', error);
+      }
+
+      // Award XP for passing quiz
+      try {
+        await awardXP(userProfile, XP_REWARDS.QUIZ_PASSED, 'quiz_passed', quiz?.id);
+        toast({
+          title: "Quiz Passed! 🎯 (+30 XP)",
+          description: "Great work! You scored high and earned 30 XP points.",
+        });
+      } catch (xpErr) {
+        console.warn('Quiz XP award note:', xpErr);
       }
     }
     setShowQuiz(false);

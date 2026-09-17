@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Flame, TrendingUp, Calendar, Award } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Flame, TrendingUp, Calendar, Award, Snowflake } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { createNotification } from "@/utils/notifications";
 
 interface StreakData {
   current_streak: number;
@@ -14,6 +18,7 @@ interface StreakData {
 
 export function StreakDisplay() {
   const { userProfile } = useAuth();
+  const { toast } = useToast();
   const [streakData, setStreakData] = useState<StreakData>({
     current_streak: 0,
     longest_streak: 0,
@@ -22,22 +27,32 @@ export function StreakDisplay() {
     streak_freezes_remaining: 3
   });
   const [loading, setLoading] = useState(true);
+  const [usingFreeze, setUsingFreeze] = useState(false);
 
   useEffect(() => {
+    if (!userProfile) return;
     fetchStreakData();
 
-    // Real-time updates for streak changes
+    // Real-time updates for streak changes matching either DB ID or auth UID
     const streakChannel = supabase
-      .channel('streak-display-updates')
+      .channel(`streak-display-${userProfile.id || userProfile.auth_user_id}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'user_streaks',
-          filter: `student_id=eq.${userProfile?.auth_user_id}`
+          table: 'user_streaks'
         },
-        () => fetchStreakData()
+        (payload) => {
+          const updatedStudentId = (payload.new as any)?.student_id;
+          if (
+            !updatedStudentId ||
+            updatedStudentId === userProfile.id ||
+            updatedStudentId === userProfile.auth_user_id
+          ) {
+            fetchStreakData();
+          }
+        }
       )
       .subscribe();
 
@@ -52,11 +67,67 @@ export function StreakDisplay() {
       
       if (error) throw error;
       
-      setStreakData(data as StreakData);
+      const streakInfo = data as StreakData;
+      setStreakData(streakInfo);
+
+      // Check if streak is at risk and notify student once per day
+      if (streakInfo && streakInfo.current_streak > 0) {
+        const hasLearnedToday = streakInfo.last_activity_date
+          ? new Date(streakInfo.last_activity_date).toDateString() === new Date().toDateString()
+          : false;
+
+        if (!hasLearnedToday) {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const studentAuthId = userProfile?.auth_user_id || userProfile?.id;
+          const notificationKey = `streak_notified_${studentAuthId}_${todayStr}`;
+
+          if (studentAuthId && !localStorage.getItem(notificationKey)) {
+            localStorage.setItem(notificationKey, "true");
+            createNotification({
+              recipientUserId: studentAuthId,
+              type: "streak_at_risk",
+              title: `Streak at Risk! 🔥 (${streakInfo.current_streak} Day${streakInfo.current_streak > 1 ? "s" : ""})`,
+              message: `Don't let your ${streakInfo.current_streak}-day learning streak cool off! Complete an activity or study plan today to keep the momentum going!`,
+              data: { current_streak: streakInfo.current_streak }
+            }).catch((e) => console.warn("Failed to dispatch streak at risk notification:", e));
+          }
+        }
+      }
     } catch (error) {
       console.error('Error fetching streak data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUseFreeze = async () => {
+    if (streakData.streak_freezes_remaining <= 0) return;
+    setUsingFreeze(true);
+    try {
+      const { data, error } = await supabase.rpc('use_streak_freeze');
+      if (error) throw error;
+      const res = data as any;
+      if (res?.success) {
+        toast({
+          title: "Streak Protected! ❄️",
+          description: `Streak freeze used successfully. You have ${res.streak_freezes_remaining} freeze(s) left.`,
+        });
+        fetchStreakData();
+      } else {
+        toast({
+          title: "Streak Freeze",
+          description: res?.message || "Could not apply streak freeze.",
+          variant: "destructive"
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to use streak freeze.",
+        variant: "destructive"
+      });
+    } finally {
+      setUsingFreeze(false);
     }
   };
 
@@ -133,15 +204,43 @@ export function StreakDisplay() {
         </div>
 
         {streakData.streak_freezes_remaining > 0 && (
-          <div className="text-center text-xs text-muted-foreground">
-            <Award className="w-3 h-3 inline mr-1" />
-            {streakData.streak_freezes_remaining} streak freeze(s) available
+          <div className="space-y-1.5 pt-1">
+            <div className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1">
+              <Award className="w-3.5 h-3.5 text-blue-500" />
+              <span>{streakData.streak_freezes_remaining} streak freeze(s) available</span>
+            </div>
+            {!isStreakActive && streakData.current_streak > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs h-7 border-blue-400/50 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                onClick={handleUseFreeze}
+                disabled={usingFreeze}
+              >
+                <Snowflake className="w-3 h-3 mr-1 text-blue-500" />
+                {usingFreeze ? "Applying freeze..." : "Use Streak Freeze"}
+              </Button>
+            )}
           </div>
         )}
 
         {!isStreakActive && streakData.current_streak > 0 && (
-          <div className="text-center text-xs text-orange-500 font-medium">
-            Complete a lesson today to keep your streak!
+          <div className="space-y-2 pt-1 border-t border-orange-500/20">
+            <div className="text-center text-xs text-orange-600 dark:text-orange-400 font-medium flex items-center justify-center gap-1">
+              <Flame className="w-3.5 h-3.5 animate-pulse text-orange-500 shrink-0" />
+              Complete an activity today to keep your streak!
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              asChild
+              className="w-full text-xs h-7 border-orange-400/50 text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/40"
+            >
+              <Link to="/calendar">
+                <Calendar className="w-3 h-3 mr-1 text-orange-500" />
+                Open Learning Calendar
+              </Link>
+            </Button>
           </div>
         )}
       </CardContent>

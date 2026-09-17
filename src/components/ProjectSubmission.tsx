@@ -6,12 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { awardXP, XP_REWARDS } from "@/utils/gamification";
 
 interface Props { courseId: string; }
 
 export function ProjectSubmission({ courseId }: Props) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [link, setLink] = useState("");
@@ -82,7 +83,17 @@ export function ProjectSubmission({ courseId }: Props) {
         // Don't fail the submission if notifications fail
       }
 
-      toast({ title: '🚀 Project Submitted!', description: 'Your awesome work has been sent to your tutor!' });
+      // Award 100 XP for project submission
+      try {
+        await awardXP(userProfile, XP_REWARDS.PROJECT_SUBMITTED, 'project_submitted', projectId);
+      } catch (xpErr) {
+        console.warn('Project XP award note:', xpErr);
+      }
+
+      toast({ 
+        title: '🚀 Project Submitted! (+100 XP)', 
+        description: 'Your awesome work has been sent to your tutor! You earned 100 XP.' 
+      });
       setTitle(""); setDescription(""); setLink(""); setFile(null);
     } catch (e: any) {
       console.error(e);
