@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,6 @@ import { BulkUserRegistration } from "./BulkUserRegistration";
 import { SuspendUserDialog } from "./SuspendUserDialog";
 import { AdminOnly, UltimateTutorAndAbove } from "./RoleBasedAccess";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ProjectGradingInterface } from "./ProjectGradingInterface";
 import { AdminLessonsList } from "./AdminLessonsList";
 
 interface Course {
@@ -48,6 +48,7 @@ interface User {
 }
 
 export function AdminDashboard() {
+  const navigate = useNavigate();
   const { userProfile } = useAuth();
   const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -508,11 +509,25 @@ export function AdminDashboard() {
       {/* Password Reset Management */}
       <PasswordReset users={users} onPasswordReset={fetchData} />
 
-      {/* Project Submissions Grading */}
-      <ProjectGradingInterface 
-        projects={projects}
-        onUpdate={fetchData}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Project Submissions</CardTitle>
+          <CardDescription>All review and grading opens in the central submission workflow.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {projects.slice(0, 10).map((project) => (
+            <div key={project.id} className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="font-medium">{project.title || "Project submission"}</p>
+                <p className="text-sm text-muted-foreground">{project.review_status || "submitted"}</p>
+              </div>
+              <Button size="sm" onClick={() => navigate(`/dashboard/submissions/${project.id}`)}>
+                View Submission
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

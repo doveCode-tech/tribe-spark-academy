@@ -7,7 +7,7 @@ import { BookOpen, Users, FileText, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { ProjectGradingInterface } from "./ProjectGradingInterface";
+import { ClickableStudentName } from "@/components/ClickableStudentName";
 
 interface Course {
   id: string;
@@ -25,6 +25,7 @@ interface Submission {
   grade: number | null;
   feedback: string | null;
   review_status: string | null;
+  student_id?: string;
   student: {
     name: string;
     email: string;
@@ -39,10 +40,12 @@ export function TutorDashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [trainingCourses, setTrainingCourses] = useState<Course[]>([]);
+  const [qualifiedCourses, setQualifiedCourses] = useState<Course[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isSuperTutor = userProfile?.role === 'admin' || userProfile?.role === 'ultimate_tutor';
+  const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
     if (!userProfile) return;
@@ -84,7 +87,7 @@ export function TutorDashboard() {
     try {
       let assignedCourseIds: string[] | null = null;
 
-      if (!isSuperTutor) {
+      if (!isAdmin) {
         const tutorIds = [userProfile?.auth_user_id, userProfile?.id].filter(Boolean);
         if (tutorIds.length > 0) {
           const { data: ctData } = await supabase
@@ -92,10 +95,38 @@ export function TutorDashboard() {
             .select('course_id')
             .in('tutor_id', tutorIds);
           assignedCourseIds = (ctData || []).map((ct: any) => ct.course_id);
+          const { data: qualificationData } = await supabase
+            .from("tutor_qualifications")
+            .select("course_id")
+            .in("tutor_id", tutorIds);
+          const qualifiedCourseIds = (qualificationData || []).map((row) => row.course_id);
+          const allQualifiedIds = Array.from(new Set([...assignedCourseIds, ...qualifiedCourseIds]));
+          if (allQualifiedIds.length > 0) {
+            const { data: qualifiedData } = await supabase
+              .from("courses")
+              .select("*")
+              .in("id", allQualifiedIds)
+              .order("created_at", { ascending: false });
+            setQualifiedCourses(qualifiedData || []);
+          } else {
+            setQualifiedCourses([]);
+          }
         } else {
           assignedCourseIds = [];
+          setQualifiedCourses([]);
         }
       }
+
+      const learnerIds = [userProfile?.id, userProfile?.auth_user_id].filter(Boolean);
+      const { data: trainingEnrollments } = await supabase
+        .from("enrollments")
+        .select("courses(*)")
+        .in("student_id", learnerIds);
+      setTrainingCourses(
+        (trainingEnrollments || [])
+          .map((row: any) => row.courses)
+          .filter(Boolean)
+      );
 
       // Fetch courses
       let coursesQuery = supabase
@@ -190,6 +221,21 @@ export function TutorDashboard() {
           </CardContent>
         </Card>
 
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card>
+            <CardHeader><CardTitle>Training Courses</CardTitle><CardDescription>Courses you are taking as a learner.</CardDescription></CardHeader>
+            <CardContent><p className="text-2xl font-bold">{trainingCourses.length}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Qualified Courses</CardTitle><CardDescription>Courses approved for teaching.</CardDescription></CardHeader>
+            <CardContent><p className="text-2xl font-bold">{isAdmin ? courses.length : qualifiedCourses.length}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Assigned Teaching</CardTitle><CardDescription>Courses currently assigned to you.</CardDescription></CardHeader>
+            <CardContent><p className="text-2xl font-bold">{courses.length}</p></CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Student Submissions</CardTitle>
@@ -253,11 +299,41 @@ export function TutorDashboard() {
         </CardContent>
       </Card>
 
-      {/* Student Submissions */}
-      <ProjectGradingInterface 
-        projects={submissions}
-        onUpdate={fetchData}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Submissions</CardTitle>
+          <CardDescription>Open a submission to review, grade, or request a resubmission.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {submissions.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">No submissions are available for your teaching scope.</p>
+          ) : (
+            <div className="space-y-3">
+              {submissions.slice(0, 10).map((submission) => (
+                <div key={submission.id} className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{submission.title || "Project submission"}</p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <ClickableStudentName
+                        studentId={submission.student_id}
+                        name={submission.student?.name}
+                        email={submission.student?.email}
+                      />
+                      <span>· {submission.courses?.title || "Course"}</span>
+                    </p>
+                    <Badge variant={submission.review_status === "graded" ? "secondary" : "default"} className="mt-2">
+                      {submission.review_status === "graded" ? "Graded" : "Pending review"}
+                    </Badge>
+                  </div>
+                  <Button size="sm" onClick={() => navigate(`/dashboard/submissions/${submission.id}`)}>
+                    View Submission
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

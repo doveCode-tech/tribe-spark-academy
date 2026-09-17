@@ -49,11 +49,13 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { soundEffects } from "@/utils/audio";
 import { createNotification } from "@/utils/notifications";
 import { awardXP, XP_REWARDS } from "@/utils/gamification";
 import { fetchUserDirectory } from "@/utils/studentDirectory";
 import { StudentDetailDialog } from "@/components/StudentDetailDialog";
+import { ClickableStudentName } from "@/components/ClickableStudentName";
 
 type StatusFilter = "no_filter" | "needs_grading" | "submitted" | "not_submitted";
 type PageTab = "assignment" | "settings" | "advanced_grading";
@@ -109,6 +111,7 @@ export default function LessonGradingPage() {
   const { courseId, lessonId } = useParams<{ courseId: string; lessonId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { userProfile } = useAuth();
 
   const [course, setCourse] = useState<any>(null);
   const [lesson, setLesson] = useState<any>(null);
@@ -120,6 +123,8 @@ export default function LessonGradingPage() {
 
   // Active Top Tab
   const [activeTab, setActiveTab] = useState<PageTab>("assignment");
+  const canUseAdvancedGrading = userProfile?.role === "admin" || userProfile?.role === "ultimate_tutor";
+  const canUseSettings = userProfile?.role === "admin";
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("no_filter");
@@ -193,6 +198,11 @@ export default function LessonGradingPage() {
       loadData();
     }
   }, [courseId, lessonId]);
+
+  useEffect(() => {
+    if (!canUseSettings && activeTab === "settings") setActiveTab("assignment");
+    if (!canUseAdvancedGrading && activeTab === "advanced_grading") setActiveTab("assignment");
+  }, [activeTab, canUseAdvancedGrading, canUseSettings]);
 
   // Keep the table in sync as students submit or profiles are updated
   useEffect(() => {
@@ -882,7 +892,7 @@ export default function LessonGradingPage() {
                 <FileText className="w-3.5 h-3.5" />
                 Assignment & Submissions
               </button>
-              <button
+              {canUseSettings && <button
                 onClick={() => setActiveTab("settings")}
                 className={`px-4 py-3 border-b-2 font-bold transition-colors flex items-center gap-1.5 ${
                   activeTab === "settings"
@@ -892,8 +902,8 @@ export default function LessonGradingPage() {
               >
                 <SettingsIcon className="w-3.5 h-3.5" />
                 Settings
-              </button>
-              <button
+              </button>}
+              {canUseAdvancedGrading && <button
                 onClick={() => setActiveTab("advanced_grading")}
                 className={`px-4 py-3 border-b-2 font-bold transition-colors flex items-center gap-1.5 ${
                   activeTab === "advanced_grading"
@@ -903,7 +913,7 @@ export default function LessonGradingPage() {
               >
                 <Award className="w-3.5 h-3.5" />
                 Advanced grading
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -1108,14 +1118,12 @@ export default function LessonGradingPage() {
                               {/* Student Name */}
                               <td className="py-3.5 px-4 font-bold text-foreground">
                                 {st.name ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setDetailStudent(st)}
-                                    className="text-purple-700 dark:text-purple-300 hover:underline font-bold text-left"
-                                    title={`View ${st.name}'s full profile, grades and activity`}
-                                  >
-                                    {st.name}
-                                  </button>
+                                  <ClickableStudentName
+                                    studentId={st.id}
+                                    name={st.name}
+                                    email={st.email}
+                                    className="text-purple-700 dark:text-purple-300"
+                                  />
                                 ) : (
                                   <span className="text-muted-foreground font-normal italic text-xs">—</span>
                                 )}
@@ -1153,42 +1161,13 @@ export default function LessonGradingPage() {
                               {/* Grade Column */}
                               <td className="py-3.5 px-4">
                                 {row.isSubmitted && sub ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      max="100"
-                                      value={vals.grade}
-                                      onChange={(e) => setDraft(sub.id, { grade: e.target.value })}
-                                      className="w-14 h-8 text-center text-xs font-semibold bg-background p-1 border-purple-200"
-                                      placeholder="—"
-                                    />
-                                    <span className="text-muted-foreground text-[11px] font-medium">/ 100</span>
                                     <Button
                                       size="sm"
-                                      onClick={() => handleSaveGrade(sub.id)}
-                                      disabled={savingGradeId === sub.id}
+                                      onClick={() => navigate(`/dashboard/submissions/${sub.id}`)}
                                       className="h-8 px-2.5 text-xs bg-purple-700 hover:bg-purple-800 text-white font-semibold"
                                     >
-                                      {savingGradeId === sub.id ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      ) : (
-                                        "Grade"
-                                      )}
+                                      Review
                                     </Button>
-                                    {(sub.grade !== null || sub.review_status === "graded") && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleUngrade(sub.id)}
-                                        disabled={savingGradeId === sub.id}
-                                        className="h-8 px-2.5 text-xs border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50 font-semibold"
-                                        title="Remove this grade and return the submission for grading"
-                                      >
-                                        Ungrade
-                                      </Button>
-                                    )}
-                                  </div>
                                 ) : (
                                   <span className="text-muted-foreground italic text-[11px]">—</span>
                                 )}
@@ -1217,7 +1196,7 @@ export default function LessonGradingPage() {
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => setViewSubmission(sub)}
+                                        onClick={() => navigate(`/dashboard/submissions/${sub.id}`)}
                                         className="h-7 text-xs px-2 gap-1 border-purple-300 text-purple-700 dark:text-purple-300 hover:bg-purple-50"
                                       >
                                         <Eye className="w-3.5 h-3.5" />
@@ -1298,17 +1277,14 @@ export default function LessonGradingPage() {
                               {/* Feedback text input */}
                               <td className="py-3.5 px-4">
                                 {row.isSubmitted && sub ? (
-                                  <Input
-                                    value={vals.feedback}
-                                    onChange={(e) => setDraft(sub.id, { feedback: e.target.value })}
-                                    onBlur={() => {
-                                      if (sub.grade !== null && vals.feedback !== sub.feedback) {
-                                        handleSaveGrade(sub.id);
-                                      }
-                                    }}
-                                    placeholder="Add tutor feedback..."
-                                    className="h-8 text-xs bg-background border-purple-200"
-                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => navigate(`/dashboard/submissions/${sub.id}`)}
+                                    className="h-8 text-xs"
+                                  >
+                                    View feedback
+                                  </Button>
                                 ) : (
                                   <span className="text-muted-foreground italic text-[11px]">—</span>
                                 )}

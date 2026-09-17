@@ -31,6 +31,8 @@ import LessonGradingPage from "./pages/LessonGradingPage";
 import Unauthorized from "./pages/Unauthorized";
 import StudyCalendarPage from "./pages/StudyCalendarPage";
 import ParentStudentView from "./pages/ParentStudentView";
+import SubmissionDetailPage from "./pages/SubmissionDetailPage";
+import StudentProfilePage from "./pages/StudentProfilePage";
 
 const App = () => (
   <TooltipProvider>
@@ -87,6 +89,16 @@ const App = () => (
           <Route path="/profile" element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/submissions/:submissionId" element={
+            <ProtectedRoute allowedRoles={['student', 'tutor', 'ultimate_tutor', 'admin']}>
+              <SubmissionDetailPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/students/:studentId" element={
+            <ProtectedRoute allowedRoles={['student', 'tutor', 'ultimate_tutor', 'admin']}>
+              <StudentProfilePage />
             </ProtectedRoute>
           } />
           <Route path="/analytics" element={

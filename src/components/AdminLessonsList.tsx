@@ -587,36 +587,15 @@ export function AdminLessonsList({ courseId, courseTitle, category, isExpanded, 
                         </div>
                       </div>
 
-                      {/* Quick Grade & Feedback inputs */}
-                      <div className="flex items-center gap-2 pt-1">
-                        <div className="w-24">
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            placeholder="Grade %"
-                            value={gradeInput[sub.id] ?? ""}
-                            onChange={(e) => setGradeInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                            className="h-8 text-xs font-semibold"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <Input
-                            placeholder="Feedback..."
-                            value={feedbackInput[sub.id] ?? ""}
-                            onChange={(e) => setFeedbackInput(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={savingGradeId === sub.id}
-                          onClick={() => handleSaveGradeInDialog(sub.id)}
-                          className="h-8 text-xs bg-[#1b4332] hover:bg-[#143225] text-white shrink-0"
-                        >
-                          {savingGradeId === sub.id ? "Saving..." : "Save Grade"}
-                        </Button>
-                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setSubmissionsDialogOpen(false);
+                          navigate(`/dashboard/submissions/${sub.id}`);
+                        }}
+                      >
+                        View Submission
+                      </Button>
                     </div>
                   ))
                 )}

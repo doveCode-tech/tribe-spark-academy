@@ -124,7 +124,7 @@ export default function SubmissionDetailPage() {
   const isTutor = userProfile?.role === "tutor";
   const isUltimateTutor = userProfile?.role === "ultimate_tutor";
   const isAdmin = userProfile?.role === "admin";
-  const isSuperStaff = isAdmin || isUltimateTutor;
+  const isSuperStaff = isAdmin;
 
   useEffect(() => {
     if (submissionId && userProfile) {
@@ -176,8 +176,8 @@ export default function SubmissionDetailPage() {
         return;
       }
 
-      // 2. If tutor, verify that tutor is qualified or assigned to this course
-      if (isTutor && !isSuperStaff) {
+      // Every non-admin staff member must have an explicit teaching relationship.
+      if (isTutor || isUltimateTutor) {
         const tutorId = userProfile.id;
         const tutorAuthId = userProfile.auth_user_id;
 

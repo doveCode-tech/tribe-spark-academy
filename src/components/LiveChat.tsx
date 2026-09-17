@@ -120,7 +120,28 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
       setLoading(true);
       try {
         if (isStudent) {
-          // Students: load their own messages immediately, no contacts sidebar
+          // Students can message their assigned tutor(s), never a broadcast channel.
+          const studentIds = [userProfile.id, userProfile.auth_user_id].filter(Boolean);
+          const { data: enrollments } = await supabase
+            .from("enrollments")
+            .select("course_id")
+            .in("student_id", studentIds);
+          const courseIds = (enrollments || []).map((row) => row.course_id).filter(Boolean);
+          if (courseIds.length > 0) {
+            const { data: assignments } = await supabase
+              .from("course_tutors")
+              .select("tutor_id")
+              .in("course_id", courseIds);
+            const tutorIds = Array.from(new Set((assignments || []).map((row) => row.tutor_id)));
+            if (tutorIds.length > 0) {
+              const { data: tutors } = await supabase
+                .from("users")
+                .select("id, auth_user_id, name, first_name, last_name, email, role, avatar_url")
+                .in("auth_user_id", tutorIds);
+              setContacts((tutors || []) as ChatUser[]);
+              setSelectedContact((tutors || [])[0] as ChatUser || null);
+            }
+          }
           await fetchStudentMessages();
         } else {
           // Staff: load all users for sidebar + sender lookup
@@ -271,9 +292,15 @@ export function LiveChat({ isWidget = false }: LiveChatProps) {
     if ((!inputMessage.trim() && !attachmentFile) || !user || sending) return;
     if (!isStudent && !selectedContact) return;
 
-    // Students broadcast to all staff (recipient_id = null)
-    // Staff reply directly to selected student
-    const recipientId = isStudent ? null : selectedContact!.auth_user_id;
+    const recipientId = selectedContact?.auth_user_id || null;
+    if (isStudent && !recipientId) {
+      toast({
+        title: "No assigned tutor",
+        description: "You can message your tutor once a teaching assignment is active.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const messageText = inputMessage.trim();
     setInputMessage("");

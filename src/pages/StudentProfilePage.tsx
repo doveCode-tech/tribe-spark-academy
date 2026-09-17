@@ -162,6 +162,42 @@ export default function StudentProfilePage() {
       const dbUserId = userData.id;
       const authUserId = userData.auth_user_id;
 
+      const currentIds = [currentUser?.id, currentUser?.auth_user_id].filter(Boolean);
+      if (currentUser?.role === "student" && !currentIds.includes(dbUserId) && !currentIds.includes(authUserId)) {
+        setLoading(false);
+        navigate("/unauthorized");
+        return;
+      }
+
+      if (currentUser?.role === "tutor" || currentUser?.role === "ultimate_tutor") {
+        const { data: targetEnrollments } = await supabase
+          .from("enrollments")
+          .select("course_id")
+          .in("student_id", [dbUserId, authUserId].filter(Boolean));
+        const courseIds = (targetEnrollments || []).map((row) => row.course_id).filter(Boolean);
+        if (courseIds.length === 0) {
+          setLoading(false);
+          navigate("/unauthorized");
+          return;
+        }
+
+        const { data: assignments } = await supabase
+          .from("course_tutors")
+          .select("course_id")
+          .in("course_id", courseIds)
+          .eq("tutor_id", currentUser.auth_user_id);
+        const { data: qualifications } = await supabase
+          .from("tutor_qualifications")
+          .select("course_id")
+          .in("course_id", courseIds)
+          .eq("tutor_id", currentUser.id);
+        if (!(assignments?.length || qualifications?.length)) {
+          setLoading(false);
+          navigate("/unauthorized");
+          return;
+        }
+      }
+
       // 2. Fetch Enrolled Courses & Progress
       const { data: enrollmentsData } = await supabase
         .from("enrollments")

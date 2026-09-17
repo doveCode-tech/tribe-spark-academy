@@ -73,60 +73,21 @@ export function SessionReportDialog({
 
     setSubmitting(true);
     try {
-      const tutorId = userProfile?.id || userProfile?.auth_user_id;
-
-      // 1. Insert report
-      const { data: reportData, error: reportError } = await supabase
-        .from("session_reports")
-        .insert({
-          session_id: session.id,
-          tutor_id: tutorId as string,
-          student_id: session.student_id || null,
-          course_id: session.course_id || null,
-          attendance_status: attendance,
-          topics_covered: topicsCovered.trim(),
-          student_performance: performance,
-          homework_assigned: homeworkAssigned.trim(),
-          notes_for_parents: notesForParents.trim(),
-          internal_notes: internalNotes.trim(),
-        })
-        .select()
-        .single();
-
-      if (reportError) throw reportError;
-
-      const reportId = reportData.id;
-
-      // 2. Mark session as ended and link report
-      const { error: sessionUpdateError } = await supabase
-        .from("class_sessions")
-        .update({
-          status: "ended",
-          actual_ended_at: new Date().toISOString(),
-          session_report_id: reportId,
-        })
-        .eq("id", session.id);
-
-      if (sessionUpdateError) throw sessionUpdateError;
-
-      // 3. Log audit record
-      try {
-        await supabase.from("audit_logs").insert({
-          action_type: "end_session_with_report",
-          performed_by: tutorId,
-          target_type: "class_session",
-          target_id: session.id,
-          details: {
-            report_id: reportId,
-            student_id: session.student_id,
-            attendance,
-            performance,
+      const { data: reportId, error: reportError } = await supabase.rpc(
+        "submit_session_report_and_end_session",
+        {
+          _session_id: session.id,
+          _report_data: {
+            attendance_status: attendance,
+            topics_covered: topicsCovered.trim(),
+            student_performance: performance,
+            homework_assigned: homeworkAssigned.trim(),
+            notes_for_parents: notesForParents.trim(),
+            internal_notes: internalNotes.trim(),
           },
-          status: "success",
-        });
-      } catch (logErr) {
-        console.warn("Could not log audit event:", logErr);
-      }
+        }
+      );
+      if (reportError) throw reportError;
 
       toast({
         title: "Session Report Submitted & Class Ended ✅",
@@ -142,7 +103,7 @@ export function SessionReportDialog({
       setPerformance(5);
 
       onOpenChange(false);
-      onReportSubmitted(reportId);
+      onReportSubmitted(reportId as string);
     } catch (err: any) {
       console.error("Error submitting session report:", err);
       toast({
