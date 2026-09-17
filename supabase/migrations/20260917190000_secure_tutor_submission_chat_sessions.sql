@@ -75,7 +75,6 @@ USING (
     )
   )
 );
-);
 
 DROP POLICY IF EXISTS "Tutors and admins can view all lessons" ON public.lessons;
 DROP POLICY IF EXISTS "Only tutors/admins can manage lessons" ON public.lessons;
