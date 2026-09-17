@@ -198,6 +198,20 @@ export default function LessonDetail() {
     const studentAuthId = user?.id || userProfile?.auth_user_id;
     if (!studentAuthId || !lesson) return;
 
+    const quizRequired = Boolean(lesson.quiz_required || lesson.quiz_id || lesson.quiz_data);
+    const assignmentRequired = Boolean(lesson.assignment_required);
+    const missing: string[] = [];
+    if (quizRequired && !isQuizPassed) missing.push("pass the quiz");
+    if (assignmentRequired && !isAssignmentSubmitted) missing.push("submit the assignment");
+    if (missing.length > 0) {
+      toast({
+        title: "Lesson requirements incomplete",
+        description: `Please ${missing.join(" and ")} before marking this lesson complete.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setCompleting(true);
     try {
       const { error: progErr } = await supabase

@@ -159,6 +159,12 @@ export function NotificationsBell() {
       } else {
         navigate('/portfolio');
       }
+    } else if (n.type === 'project_submitted' || n.type === 'submission_received') {
+      if (n.data?.submission_id || n.data?.project_id) {
+        navigate(`/dashboard/submissions/${n.data.submission_id || n.data.project_id}`);
+      } else {
+        navigate('/dashboard');
+      }
     } else if (n.type === 'chat_message') {
       if (n.data?.sender_id) {
         navigate(`/chat?user=${n.data.sender_id}`);

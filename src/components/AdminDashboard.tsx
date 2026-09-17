@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, BookOpen, Users, GraduationCap, Settings, Trash2 } from "lucide-react";
@@ -11,7 +12,7 @@ import { CourseCreator } from "./CourseCreator";
 import { PasswordReset } from "./PasswordReset";
 import { EnrollmentDialog } from "./EnrollmentDialog";
 import { TutorAssignDialog } from "./TutorAssignDialog";
-import { CodeTemplateEditor } from "./CodeTemplateEditor";
+import { CourseParticipantsDialog } from "./CourseParticipantsDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UnenrollDialog } from "./UnenrollDialog";
 import { BulkUserRegistration } from "./BulkUserRegistration";
@@ -240,16 +241,17 @@ export function AdminDashboard() {
 
   const deleteCourse = async (courseId: string) => {
     try {
-      const { error } = await supabase
-        .from('courses')
-        .delete()
-        .eq('id', courseId);
+      const { data, error } = await supabase.rpc('admin_delete_or_archive_course', {
+        p_course_id: courseId,
+      });
 
       if (error) throw error;
 
       toast({
-        title: "Success",
-        description: "Course deleted successfully",
+        title: data === 'archived' ? "Course archived" : "Success",
+        description: data === 'archived'
+          ? "This course has history and was archived to preserve records."
+          : "Course deleted successfully",
       });
 
       fetchData();
@@ -558,7 +560,29 @@ function CourseCardWithLessons({
         </div>
         <div className="flex gap-2 flex-wrap">
           <TutorAssignDialog courseId={course.id} users={users} onChange={onRefresh} />
-          <CodeTemplateEditor courseId={course.id} category={course.category} />
+          <CourseParticipantsDialog
+            courseId={course.id}
+            courseTitle={course.title}
+            triggerLabel="Participants"
+            onEnrollmentChanged={onRefresh}
+          />
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Settings className="w-4 h-4 mr-1" /> Course Settings
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{course.title} Settings</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <p><span className="font-medium">Category:</span> {course.category || "Not set"}</p>
+                <p><span className="font-medium">Description:</span> {course.description || "Not set"}</p>
+                <p className="text-muted-foreground">Course metadata is managed from the course editor.</p>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Button
             variant="destructive"
             size="sm"

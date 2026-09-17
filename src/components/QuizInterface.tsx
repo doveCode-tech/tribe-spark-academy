@@ -84,14 +84,7 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Extra attempts granted by Admin / Ultimate Tutor
-  const extraAttemptKey = `quiz_extra_attempts_${quiz.id}_${studentId}`;
-  const [extraAttempts, setExtraAttempts] = useState<number>(() => {
-    try {
-      return parseInt(localStorage.getItem(extraAttemptKey) || "0", 10) || 0;
-    } catch {
-      return 0;
-    }
-  });
+  const [extraAttempts, setExtraAttempts] = useState(0);
 
   const maxAllowedAttempts = 2 + extraAttempts;
   const userRole = (userProfile?.role || "").toLowerCase();
@@ -103,17 +96,26 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
 
   const loadAttempts = async () => {
     try {
-      const { data } = await supabase
+      const [{ data }, { data: extension }] = await Promise.all([
+        supabase
         .from("quiz_attempts")
         .select("attempt_number")
         .eq("student_id", studentId)
         .eq("quiz_id", quiz.id)
         .order("attempt_number", { ascending: false })
-        .limit(1);
+        .limit(1),
+        supabase
+          .from("quiz_attempt_extensions")
+          .select("extra_attempts")
+          .eq("quiz_id", quiz.id)
+          .eq("student_id", studentId)
+          .maybeSingle(),
+      ]);
 
       if (data && data.length > 0) {
         setAttempts(data[0].attempt_number);
       }
+      setExtraAttempts(extension?.extra_attempts || 0);
     } catch (error) {
       console.warn("Could not load attempt count:", error);
     }
@@ -157,7 +159,18 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
     }
 
     try {
-      const newAttemptNum = attempts + 1;
+      const { data: latestAttempts, error: latestError } = await supabase
+        .from("quiz_attempts")
+        .select("attempt_number")
+        .eq("student_id", studentId)
+        .eq("quiz_id", quiz.id)
+        .order("attempt_number", { ascending: false })
+        .limit(1);
+      if (latestError) throw latestError;
+      const newAttemptNum = (latestAttempts?.[0]?.attempt_number || 0) + 1;
+      if (newAttemptNum > 2 + extraAttempts) {
+        throw new Error("No quiz attempts remain. Please contact your tutor.");
+      }
       setAttempts(newAttemptNum);
 
       // Save quiz attempt in Supabase
@@ -270,16 +283,24 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
 
   // Admin / Ultimate Tutor overrides limit and grants +1 attempt
   const handleAuthorizeExtraAttempt = () => {
-    const updated = extraAttempts + 1;
-    setExtraAttempts(updated);
-    try {
-      localStorage.setItem(extraAttemptKey, String(updated));
-    } catch {}
-    soundEffects.playChime();
-    toast({
-      title: "🔑 Extra Attempt Authorized!",
-      description: `Admin authorization granted! Total allowed attempts: ${2 + updated}.`,
-    });
+    const authorize = async () => {
+      const updated = extraAttempts + 1;
+      const { error } = await supabase.from("quiz_attempt_extensions").upsert({
+        quiz_id: quiz.id,
+        student_id: studentId,
+        extra_attempts: updated,
+        authorized_by: userProfile?.auth_user_id || user?.id,
+      }, { onConflict: "quiz_id,student_id" });
+      if (error) {
+        console.error("Error authorizing extra quiz attempt:", error);
+        toast({ title: "Authorization failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      setExtraAttempts(updated);
+      soundEffects.playChime();
+      toast({ title: "🔑 Extra Attempt Authorized!", description: `Total allowed attempts: ${2 + updated}.` });
+    };
+    void authorize();
   };
 
   const answeredCount = Object.keys(answers).length;
@@ -510,7 +531,7 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
             {isLastQuestion ? (
               <Button
                 onClick={() => setConfirmOpen(true)}
-                disabled={submitting}
+                disabled={submitting || answeredCount !== activeQuestions.length}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5"
               >
                 <Send className="w-3.5 h-3.5" />
@@ -558,7 +579,7 @@ export function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) {
             <Button
               size="sm"
               onClick={handleConfirmSubmit}
-              disabled={submitting}
+              disabled={submitting || answeredCount !== activeQuestions.length}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5"
             >
               <Send className="w-3.5 h-3.5" />

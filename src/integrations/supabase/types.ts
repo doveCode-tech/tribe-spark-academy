@@ -1248,6 +1248,10 @@ export type Database = {
         Args: { _course_id: string; _user_id: string }
         Returns: undefined
       }
+      admin_delete_or_archive_course: {
+        Args: { p_course_id: string }
+        Returns: string
+      }
       admin_list_users: {
         Args: never
         Returns: {
